@@ -31,3 +31,4 @@ pnpm-debug.log*
 
 # SQLite database (auto-created on first run)
 data/
+.vercel
