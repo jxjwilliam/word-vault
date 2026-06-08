@@ -1,4 +1,4 @@
-# translate-app — Agent Guide
+# word-vault — Agent Guide
 
 ## Quick start
 
