@@ -19,23 +19,26 @@ npm run preview      # Vite preview (requires built dist/)
 
 ## Architecture
 
-Single-page dictionary app (English ↔ Chinese). Persistence via **Node.js built-in `node:sqlite`**, no external database.
+Single-page dictionary app (English ↔ Chinese). Persistence via **`@libsql/client`** — local `file:` SQLite for dev, remote Turso for Vercel deployment.
 
 ```
 scripts/dev.mjs      # spawns both servers concurrently
 server/index.mjs     # Node.js HTTP API server, serves static dist/
+api/index.mjs        # Vercel serverless function entry (re-exports server handler)
 src/                 # Vite React frontend
 abbrs.md             # bundled seed vocabulary
-data/dictionary.sqlite # auto-created SQLite DB
+data/dictionary.sqlite # auto-created SQLite DB (local dev)
+vercel.json          # Vercel build config + function routing
 ```
 
 | Dir | Purpose |
 |---|---|
 | `src/` | React app — 4 source files + styles.css |
 | `server/` | Single-file Node.js HTTP + SQLite API |
+| `api/` | Vercel serverless function entry point |
 | `scripts/` | Dev orchestrator (spawns both processes) |
 | `dist/` | Build output (gitignored) |
-| `data/` | SQLite database (auto-created) |
+| `data/` | SQLite database (auto-created, gitignored) |
 
 ## Source files
 
@@ -46,7 +49,9 @@ data/dictionary.sqlite # auto-created SQLite DB
 | `src/dictionary.ts` | Pure functions: `sortEntries`, `entryMatches`, `normalizeTags`, `tagsToInput`, `createExportPayload`, `parseImportPayload` |
 | `src/App.tsx` | All UI state and rendering — single 493-line component |
 | `src/styles.css` | All styles (no CSS framework) |
-| `server/index.mjs` | Full API server — CRUD routes, SQLite schema, seed logic, static file serving |
+| `server/index.mjs` | Full API server — CRUD routes, SQLite schema, seed logic, static file serving; also exports handler for Vercel |
+| `api/index.mjs` | Vercel serverless function entry (re-exports `server/index.mjs` handler) |
+| `vercel.json` | Vercel build config, `/api/*` rewrite rule, Node.js 22 runtime |
 
 ## API routes
 
@@ -74,7 +79,8 @@ All routes are prefixed with `/api/`:
 - **Port** defaults to 4174 for API, 5173 for Vite; override via `PORT` env var (API server only)
 - **Auto-seed**: `abbrs.md` is imported automatically on first server start (tracked in `metadata` table)
 - **No SSR, no routing** — single-page app, all state in React component
-- `node:sqlite` requires **Node.js 22+** (built-in, not a package dependency)
+- **`@libsql/client`** replaces `node:sqlite` — uses `file:` protocol for local dev, Turso for Vercel (set `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`)
+- **Node.js 18+** required (for `@libsql/client`); Vercel function uses Node.js 22
 - **Vite proxies `/api/*`** to port 4174 in dev mode (configured in `vite.config.ts`). In production, the API server serves static `dist/` directly on the API port, no proxy needed.
 - **`data/` is gitignored** — the SQLite database is auto-created and should not be committed.
 
