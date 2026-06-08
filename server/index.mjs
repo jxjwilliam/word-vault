@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { createClient } from "@libsql/client";
 import { createReadStream, existsSync, readFileSync } from "node:fs";
 import { extname, resolve } from "node:path";
