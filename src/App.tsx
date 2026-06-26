@@ -72,8 +72,58 @@ export function App() {
   const [message, setMessage] = useState("正在从 SQLite 读取词库。");
   const importInputRef = useRef<HTMLInputElement>(null);
 
+  const [isExtension, setIsExtension] = useState(false);
+
   useEffect(() => {
     void refreshEntries("已从 SQLite 载入 abbrs.md 默认词库。");
+  }, []);
+
+  // Chrome extension integration: check for context menu prefill/lookup data
+  useEffect(() => {
+    const isExt = typeof chrome !== "undefined" && !!chrome.runtime?.id;
+    setIsExtension(isExt);
+
+    if (!isExt) return;
+
+    // Read any pending data from the background script
+    const loadPendingData = async () => {
+      try {
+        const data = await chrome.runtime.sendMessage({ type: "get-prefill" });
+        if (!data) return;
+
+        if (data.wordVaultPrefill?.sourceText) {
+          setForm((prev) => ({
+            ...prev,
+            sourceText: data.wordVaultPrefill.sourceText,
+          }));
+          setEditingId(null);
+          setMessage(`已载入选中的文字："${data.wordVaultPrefill.sourceText}"`);
+        }
+
+        if (data.wordVaultLookup?.query) {
+          setQuery(data.wordVaultLookup.query);
+        }
+
+        // Clear the stored data so subsequent panel opens don't reuse it
+        await chrome.runtime.sendMessage({ type: "clear-prefill" });
+      } catch {
+        // Background script not reachable — running outside extension context
+      }
+    };
+
+    void loadPendingData();
+
+    // Listen for real-time updates from background script
+    const handleMessage = (message: { type: string }) => {
+      if (message.type === "prefill-updated" || message.type === "lookup-updated") {
+        void loadPendingData();
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(handleMessage);
+    return () => {
+      chrome.runtime.onMessage.removeListener(handleMessage);
+    };
   }, []);
 
   const refreshEntries = async (successMessage?: string) => {
@@ -270,7 +320,10 @@ export function App() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Local Dictionary</p>
+            <p className="eyebrow">
+              Local Dictionary
+              {isExtension && <span className="extension-badge">扩展</span>}
+            </p>
             <h1>阅读生词库</h1>
           </div>
           <div className="stats" aria-label="词库统计">

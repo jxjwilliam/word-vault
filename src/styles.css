@@ -54,6 +54,22 @@ button {
   font-weight: 760;
   letter-spacing: 0;
   text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.extension-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  font-size: 0.65rem;
+  font-weight: 650;
+  letter-spacing: 0.3px;
+  text-transform: none;
+  color: #fff;
+  background: #4f6cf7;
+  border-radius: 999px;
+  line-height: 1.4;
 }
 
 h1,

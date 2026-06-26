@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Word Vault",
+  "version": "1.0.0",
+  "description": "阅读生词库 — 浏览网页时快速查词、收藏生词",
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "permissions": ["sidePanel", "contextMenus", "storage"],
+  "host_permissions": ["https://translate-word-vault.vercel.app/*"],
+  "side_panel": {
+    "default_path": "index.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Word Vault — 打开生词库"
+  },
+  "minimum_chrome_version": "116"
+}
