@@ -85,37 +85,39 @@
 | **LLM-as-judge** | **以大模型作为评判者** |
 | **drift (data / model drift)** | **数据漂移 / 模型漂移** |
 
-| Acronym | Full Term | 中文 |
-| --- | --- | --- |
-| LLM | Large Language Model | 大语言模型 |
-| RAG | Retrieval-Augmented Generation | 检索增强生成 |
-| SFT | Supervised Fine-Tuning | 监督微调 |
-| RLHF | Reinforcement Learning from Human Feedback | 基于人类反馈的强化学习 |
-| DPO | Direct Preference Optimization | 直接偏好优化 |
-| PPO | Proximal Policy Optimization | 近端策略优化 |
-| GRPO | Group Relative Policy Optimization | 组相对策略优化 |
-| LoRA | Low-Rank Adaptation | 低秩适配 |
-| QLoRA | Quantized LoRA | 量化低秩适配 |
-| PEFT | Parameter-Efficient Fine-Tuning | 参数高效微调 |
-| MoE | Mixture of Experts | 混合专家模型 |
-| KV cache | Key-Value Cache | 键值缓存 |
-| TTFT | Time To First Token | 首 token 延迟 |
-| TPS | Tokens Per Second | 每秒 token 数 |
-| CoT | Chain of Thought | 思维链 |
-| ToT | Tree of Thought | 思维树 |
-| ReAct | Reason + Act | 推理与行动 |
-| MCP | Model Context Protocol | 模型上下文协议 |
-| VLM | Vision-Language Model | 视觉语言模型 |
-| ANN | Approximate Nearest Neighbor | 近似最近邻 |
-| HNSW | Hierarchical Navigable Small World | 分层可导航小世界索引 |
-| XAI | Explainable AI | 可解释人工智能 |
-| MLOps | Machine Learning Operations | 机器学习运维 |
-| ETA | Estimated Time of Arrival | 预计到达时间 |
-| EDD | Estimated Delivery Date | 预计交付日期 |
-| GAN | Generative Adversarial Network | 生成对抗网络 |
-| ASR | Automatic Speech Recognition | 自动语音识别 |
-| TTS | Text-to-Speech | 文本转语音 |
-| CI/CD | Continuous Integration / Continuous Delivery | 持续集成/持续交付 |
+Acronym quick reference — English (Chinese)
+
+| English Term | Chinese Translation |
+| --- | --- |
+| LLM (Large Language Model) | 大语言模型 |
+| RAG (Retrieval-Augmented Generation) | 检索增强生成 |
+| SFT (Supervised Fine-Tuning) | 监督微调 |
+| RLHF (Reinforcement Learning from Human Feedback) | 基于人类反馈的强化学习 |
+| DPO (Direct Preference Optimization) | 直接偏好优化 |
+| PPO (Proximal Policy Optimization) | 近端策略优化 |
+| GRPO (Group Relative Policy Optimization) | 组相对策略优化 |
+| LoRA (Low-Rank Adaptation) | 低秩适配 |
+| QLoRA (Quantized LoRA) | 量化低秩适配 |
+| PEFT (Parameter-Efficient Fine-Tuning) | 参数高效微调 |
+| MoE (Mixture of Experts) | 混合专家模型 |
+| KV cache (Key-Value Cache) | 键值缓存 |
+| TTFT (Time To First Token) | 首 token 延迟 |
+| TPS (Tokens Per Second) | 每秒 token 数 |
+| CoT (Chain of Thought) | 思维链 |
+| ToT (Tree of Thought) | 思维树 |
+| ReAct (Reason + Act) | 推理与行动 |
+| MCP (Model Context Protocol) | 模型上下文协议 |
+| VLM (Vision-Language Model) | 视觉语言模型 |
+| ANN (Approximate Nearest Neighbor) | 近似最近邻 |
+| HNSW (Hierarchical Navigable Small World) | 分层可导航小世界索引 |
+| XAI (Explainable AI) | 可解释人工智能 |
+| MLOps (Machine Learning Operations) | 机器学习运维 |
+| ETA (Estimated Time of Arrival) | 预计到达时间 |
+| EDD (Estimated Delivery Date) | 预计交付日期 |
+| GAN (Generative Adversarial Network) | 生成对抗网络 |
+| ASR (Automatic Speech Recognition) | 自动语音识别 |
+| TTS (Text-to-Speech) | 文本转语音 |
+| CI/CD (Continuous Integration / Continuous Delivery) | 持续集成/持续交付 |
 
 ### 📚 RAG 与数据 (ai)
 

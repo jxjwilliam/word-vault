@@ -381,7 +381,7 @@ function parseMarkdownDictionary(markdown) {
     const cells = trimmed
       .slice(1, -1)
       .split("|")
-      .map((cell) => cell.trim());
+      .map((cell) => cell.trim().replace(/\*\*/g, ""));
 
     if (cells.length < 2) continue;
 
