@@ -81,7 +81,7 @@ async function initSchema() {
 async function seedDefaultDictionary() {
   const seeded = await db.execute({
     sql: "SELECT value FROM metadata WHERE key = ?",
-    args: ["abbrs_seeded"],
+    args: ["abbrs_seeded_v2"],
   });
   if (seeded.rows.length > 0 && seeded.rows[0].value === "true") return;
 
@@ -89,7 +89,7 @@ async function seedDefaultDictionary() {
   if (Number(count.rows[0].count) > 0) {
     await db.execute({
       sql: "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
-      args: ["abbrs_seeded", "true"],
+      args: ["abbrs_seeded_v2", "true"],
     });
     return;
   }
@@ -109,7 +109,7 @@ async function seedDefaultDictionary() {
 
   await db.execute({
     sql: "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
-    args: ["abbrs_seeded", "true"],
+    args: ["abbrs_seeded_v2", "true"],
   });
 }
 
@@ -361,9 +361,20 @@ async function lookupWord(word) {
 function parseMarkdownDictionary(markdown) {
   const now = new Date().toISOString();
   const entries = [];
+  let category = "general";
 
   for (const line of markdown.split("\n")) {
     const trimmed = line.trim();
+
+    const header = trimmed.match(/^###\s+(.+)$/);
+    if (header) {
+      const label = header[1].trim();
+      const paren = label.match(/\(([^)]+)\)\s*$/);
+      const raw = paren ? paren[1].trim().toLowerCase() : label.toLowerCase();
+      category = ["ai", "programming", "general"].includes(raw) ? raw : "general";
+      continue;
+    }
+
     if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) continue;
     if (/^\|\s*-+/.test(trimmed) || /English Term/i.test(trimmed)) continue;
 
@@ -384,6 +395,7 @@ function parseMarkdownDictionary(markdown) {
       direction: "en-to-zh",
       note: "Imported from abbrs.md",
       tags: ["abbrs"],
+      category,
       archived: false,
       createdAt: now,
       updatedAt: now,
