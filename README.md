@@ -101,7 +101,7 @@ node server/index.mjs
    turso db tokens create vocab-keep
    ```
 
-4. Set environment variables in `.env` (auto-loaded by `dotenv`):
+4. Set environment variables in `.env.local` (auto-loaded by `dotenv`):
    ```bash
    TURSO_DATABASE_URL="libsql://vocab-keep-<org>.turso.io"
    TURSO_AUTH_TOKEN="<token>"

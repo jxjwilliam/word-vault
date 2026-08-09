@@ -20,10 +20,13 @@
  *   TURSO_AUTH_TOKEN      - Turso auth token
  */
 
-import "dotenv/config";
+import { config as loadEnv } from "dotenv";
 import { createClient } from "@libsql/client";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
+
+// Env: prefer merged .env.local, fall back to legacy .env
+loadEnv({ path: existsSync(".env.local") ? ".env.local" : ".env", quiet: true });
 
 // ---------------------------------------------------------------------------
 // Config

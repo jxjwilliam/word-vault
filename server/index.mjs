@@ -1,9 +1,12 @@
-import "dotenv/config";
+import { config as loadEnv } from "dotenv";
 import { createClient } from "@libsql/client";
 import { createReadStream, existsSync, readFileSync } from "node:fs";
 import { extname, resolve } from "node:path";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
+
+// Env: prefer merged .env.local, fall back to legacy .env
+loadEnv({ path: existsSync(".env.local") ? ".env.local" : ".env", quiet: true });
 
 // ---------------------------------------------------------------------------
 // Database — supports Turso (remote) and local file-based SQLite
