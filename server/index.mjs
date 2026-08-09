@@ -279,6 +279,82 @@ async function mergeEntriesById(entries) {
 }
 
 // ---------------------------------------------------------------------------
+// LLM lookup (TermVault)
+// ---------------------------------------------------------------------------
+
+async function lookupWord(word) {
+  const apiKey = process.env.LLM_API_KEY;
+  if (!apiKey) {
+    const error = new Error("LLM_API_KEY not configured — set it in the environment");
+    error.statusCode = 500;
+    throw error;
+  }
+
+  const base = (process.env.LLM_BASE_URL || "https://api.deepseek.com/v1").replace(/\/+$/, "");
+  const model = process.env.LLM_MODEL || "deepseek-chat";
+  const direction = /[\u4e00-\u9fff]/.test(word) ? "zh-to-en" : "en-to-zh";
+
+  const response = await fetch(`${base}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a technical translator for AI and programming terms. " +
+            "Give domain-correct Chinese translations, never literal ones " +
+            "(e.g. RAG → 检索增强生成, embedding → 向量嵌入, backpressure → 背压). " +
+            'Respond ONLY with a JSON object: {"translation": string, "synonyms": string[], "antonyms": string[]} ' +
+            "with at most 3 items in each array (empty arrays allowed when none exist).",
+        },
+        { role: "user", content: `Translate this term: ${word}` },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const error = new Error(`LLM request failed: ${response.status}`);
+    error.statusCode = 502;
+    throw error;
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) {
+    const error = new Error("LLM returned empty response");
+    error.statusCode = 502;
+    throw error;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    const error = new Error("LLM returned invalid JSON");
+    error.statusCode = 502;
+    throw error;
+  }
+
+  return {
+    translation: String(parsed.translation ?? "").trim(),
+    synonyms: Array.isArray(parsed.synonyms)
+      ? parsed.synonyms.map((item) => String(item).trim()).filter(Boolean).slice(0, 3)
+      : [],
+    antonyms: Array.isArray(parsed.antonyms)
+      ? parsed.antonyms.map((item) => String(item).trim()).filter(Boolean).slice(0, 3)
+      : [],
+    direction,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -434,6 +510,17 @@ async function handleApi(request, response, url) {
     const incoming = Array.isArray(body) ? body : Array.isArray(body.entries) ? body.entries : [];
     const added = await mergeEntriesById(incoming.map((entry) => normalizeEntryInput(entry)));
     sendJson(response, 200, { added, entries: await listEntries() });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/lookup") {
+    const body = await readJson(request);
+    const word = String(body.word ?? "").trim();
+    if (!word) {
+      sendJson(response, 400, { error: "word is required" });
+      return;
+    }
+    sendJson(response, 200, await lookupWord(word));
     return;
   }
 
