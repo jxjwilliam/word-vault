@@ -1,4 +1,4 @@
-import type { DictionaryEntry } from "./types";
+import type { DictionaryEntry, LookupResult } from "./types";
 
 // When running as a Chrome extension (side panel), use the public Vercel API.
 // In local dev (Vite proxy), use the relative /api path.
@@ -43,7 +43,10 @@ export const fetchEntries = async () => {
 };
 
 export const createEntry = async (
-  entry: Pick<DictionaryEntry, "sourceText" | "targetText" | "direction" | "note" | "tags">,
+  entry: Pick<
+    DictionaryEntry,
+    "sourceText" | "targetText" | "direction" | "note" | "tags" | "synonyms" | "antonyms" | "category"
+  >,
 ) => {
   const payload = await requestJson<EntryResponse>(api("/api/entries"), {
     method: "POST",
@@ -55,7 +58,18 @@ export const createEntry = async (
 
 export const updateEntry = async (
   id: string,
-  entry: Pick<DictionaryEntry, "sourceText" | "targetText" | "direction" | "note" | "tags" | "archived">,
+  entry: Pick<
+    DictionaryEntry,
+    | "sourceText"
+    | "targetText"
+    | "direction"
+    | "note"
+    | "tags"
+    | "synonyms"
+    | "antonyms"
+    | "category"
+    | "archived"
+  >,
 ) => {
   const payload = await requestJson<EntryResponse>(api(`/api/entries/${encodeURIComponent(id)}`), {
     method: "PUT",
@@ -91,5 +105,12 @@ export const importEntries = async (entries: DictionaryEntry[]) => {
   return requestJson<ImportResponse>(api("/api/import/json"), {
     method: "POST",
     body: JSON.stringify({ entries }),
+  });
+};
+
+export const lookupWord = async (word: string) => {
+  return requestJson<LookupResult>(api("/api/lookup"), {
+    method: "POST",
+    body: JSON.stringify({ word }),
   });
 };

@@ -1,5 +1,14 @@
 export type Direction = "en-to-zh" | "zh-to-en";
 
+export type Category = "" | "ai" | "programming" | "general";
+export type CategoryFilter = "all" | Category;
+export type LookupResult = {
+  translation: string;
+  synonyms: string[];
+  antonyms: string[];
+  direction: Direction;
+};
+
 export type DictionaryEntry = {
   id: string;
   sourceText: string;
@@ -8,6 +17,9 @@ export type DictionaryEntry = {
   note: string;
   tags: string[];
   archived: boolean;
+  synonyms: string[];
+  antonyms: string[];
+  category: Category;
   createdAt: string;
   updatedAt: string;
 };

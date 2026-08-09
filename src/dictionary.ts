@@ -1,4 +1,4 @@
-import type { DictionaryEntry, Direction, ExportPayload, SortKey } from "./types";
+import type { Category, DictionaryEntry, Direction, ExportPayload, SortKey } from "./types";
 
 export const normalizeTags = (value: string) =>
   value
@@ -30,6 +30,8 @@ export const entryMatches = (entry: DictionaryEntry, query: string) => {
     entry.note,
     entry.direction,
     entry.tags.join(" "),
+    entry.synonyms.join(" "),
+    entry.antonyms.join(" "),
   ]
     .join(" ")
     .toLowerCase()
@@ -79,3 +81,18 @@ const isEntry = (value: unknown): value is DictionaryEntry => {
     typeof entry.updatedAt === "string"
   );
 };
+
+export const categoryLabels: Record<Exclude<Category, "">, string> = {
+  ai: "AI",
+  programming: "编程",
+  general: "通用",
+};
+
+export const categoryOf = (entry: Pick<DictionaryEntry, "category" | "tags">): Category => {
+  if (entry.category) return entry.category;
+  const legacy = entry.tags[0];
+  return legacy === "ai" || legacy === "programming" || legacy === "general" ? legacy : "";
+};
+
+export const detectDirection = (text: string): Direction =>
+  /[\u4e00-\u9fff]/.test(text) ? "zh-to-en" : "en-to-zh";
