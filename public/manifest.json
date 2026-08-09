@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Word Vault",
+  "name": "TermVault 术语库",
+  "short_name": "TermVault",
   "version": "1.0.0",
-  "description": "阅读生词库 — 浏览网页时快速查词、收藏生词",
+  "description": "中英文术语库：AI / 编程单词一键自动翻译、同义词反义词、快速查询",
   "icons": {
     "16": "icon16.png",
     "48": "icon48.png",
@@ -18,7 +19,7 @@
     "type": "module"
   },
   "action": {
-    "default_title": "Word Vault — 打开生词库"
+    "default_title": "TermVault — 打开术语库"
   },
   "minimum_chrome_version": "116"
 }

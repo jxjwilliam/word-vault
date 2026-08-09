@@ -18,7 +18,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   // Create context menu items
   chrome.contextMenus.create({
     id: "add-word",
-    title: '添加 "%s" 到生词库',
+    title: '添加 "%s" 到术语库',
     contexts: ["selection"],
   });
 

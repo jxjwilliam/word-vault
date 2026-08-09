@@ -45,9 +45,9 @@ The app is also packaged as a **Chrome Extension** (Manifest V3).
 ### Features
 
 - **Side Panel**: Click toolbar icon or press `Ctrl+B` (Cmd+B) — lives in Chrome's right sidebar
-- **Right-click add**: Select text → right-click → "添加 "%s" 到生词库"
+- **Right-click add**: Select text → right-click → "添加 "%s" 到术语库"
 - **Quick lookup**: Select text → right-click → "查询 "%s"" — opens panel with search pre-filled
-- The "扩展" badge appears in the topbar when running in extension context
+- The side panel auto-fills the query from the context menu (get-prefill / clear-prefill messages); the topbar shows no special badge
 
 ## Architecture
 
@@ -79,7 +79,7 @@ vercel.json          # Vercel build config + function routing
 | `src/types.ts` | `DictionaryEntry`, `Direction`, `SortKey`, `ArchiveFilter`, `ExportPayload` |
 | `src/api.ts` | REST client: `fetchEntries`, `createEntry`, `updateEntry`, `patchEntry`, `deleteEntryById`, `importAbbrs`, `importEntries` |
 | `src/dictionary.ts` | Pure functions: `sortEntries`, `entryMatches`, `normalizeTags`, `tagsToInput`, `createExportPayload`, `parseImportPayload` |
-| `src/App.tsx` | All UI state and rendering — single 493-line component |
+| `src/App.tsx` | All UI state and rendering — main component (~700 lines, multi-column glossary/search layout) |
 | `src/styles.css` | All styles (no CSS framework) |
 | `server/index.mjs` | Full API server — CRUD routes, SQLite schema, seed logic, static file serving; also exports handler for Vercel |
 | `api/index.mjs` | Vercel serverless function entry (re-exports `server/index.mjs` handler) |
@@ -98,6 +98,7 @@ All routes are prefixed with `/api/`:
 | DELETE | `/api/entries/:id` | — | `{ ok: true }` |
 | POST | `/api/import/abbrs` | `{}` | `{ added: N, entries: [...] }` |
 | POST | `/api/import/json` | `{ entries: [...] }` | `{ added: N, entries: [...] }` |
+| POST | `/api/lookup` | `{ word }` | `{ translation, synonyms, antonyms, direction }` |
 
 ## Key facts
 
@@ -105,7 +106,7 @@ All routes are prefixed with `/api/`:
 - **TypeScript strict mode** is on; prefer avoiding `as any` and `@ts-ignore`
 - **Tags** are stored as JSON array strings in SQLite (`tags TEXT DEFAULT '[]'`); parsed on read
 - **Entries have a unique constraint** on `(lower(trim(source_text)), lower(trim(target_text)))`
-- **Direction** is `"en-to-zh"` or `"zh-to-en"` (SQLite CHECK constraint)
+- **Direction** is `"en-to-zh"` or `"zh-to-en"` (SQLite CHECK constraint); the lookup route guesses it from the word's script (entries are always saved with a concrete direction — `auto` is never stored)
 - **Import merges by text pair** — if source+target match, the entry is skipped (not duplicated)
 - **Database path** is `data/dictionary.sqlite`; override via `DICTIONARY_DB_PATH` env var
 - **Port** defaults to 4174 for API, 5173 for Vite; override via `PORT` env var (API server only)
@@ -115,6 +116,7 @@ All routes are prefixed with `/api/`:
 - **Node.js 18+** required (for `@libsql/client`); Vercel function uses Node.js 22
 - **Vite proxies `/api/*`** to port 4174 in dev mode (configured in `vite.config.ts`). In production, the API server serves static `dist/` directly on the API port, no proxy needed.
 - **`data/` is gitignored** — the SQLite database is auto-created and should not be committed.
+- LLM 自动翻译走 OpenAI 兼容接口：LLM_API_KEY (必填), LLM_BASE_URL (默认 https://api.deepseek.com/v1), LLM_MODEL (默认 deepseek-chat)
 
 ## Style conventions
 
