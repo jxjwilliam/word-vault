@@ -63,6 +63,19 @@ async function initSchema() {
   } catch {
     // Index already exists — safe to ignore
   }
+
+  // TermVault: add columns for LLM-generated synonyms/antonyms/category (idempotent)
+  const tableInfo = await db.execute("PRAGMA table_info(entries)");
+  const existingColumns = new Set(tableInfo.rows.map((row) => String(row.name)));
+  if (!existingColumns.has("synonyms")) {
+    await db.execute(`ALTER TABLE entries ADD COLUMN synonyms TEXT NOT NULL DEFAULT '[]'`);
+  }
+  if (!existingColumns.has("antonyms")) {
+    await db.execute(`ALTER TABLE entries ADD COLUMN antonyms TEXT NOT NULL DEFAULT '[]'`);
+  }
+  if (!existingColumns.has("category")) {
+    await db.execute(`ALTER TABLE entries ADD COLUMN category TEXT NOT NULL DEFAULT ''`);
+  }
 }
 
 async function seedDefaultDictionary() {
@@ -113,6 +126,9 @@ async function listEntries() {
       direction,
       note,
       tags,
+      synonyms,
+      antonyms,
+      category,
       archived,
       created_at AS createdAt,
       updated_at AS updatedAt
@@ -131,6 +147,9 @@ async function getEntry(id) {
       direction,
       note,
       tags,
+      synonyms,
+      antonyms,
+      category,
       archived,
       created_at AS createdAt,
       updated_at AS updatedAt
@@ -150,8 +169,8 @@ async function getEntry(id) {
 async function insertEntry(entry) {
   await db.execute({
     sql: `INSERT INTO entries (
-      id, source_text, target_text, direction, note, tags, archived, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, source_text, target_text, direction, note, tags, archived, synonyms, antonyms, category, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       entry.id,
       entry.sourceText,
@@ -160,6 +179,9 @@ async function insertEntry(entry) {
       entry.note,
       JSON.stringify(entry.tags),
       entry.archived ? 1 : 0,
+      JSON.stringify(entry.synonyms ?? []),
+      JSON.stringify(entry.antonyms ?? []),
+      entry.category ?? "",
       entry.createdAt,
       entry.updatedAt,
     ],
@@ -179,7 +201,7 @@ async function updateEntry(id, input) {
 
   await db.execute({
     sql: `UPDATE entries
-      SET source_text = ?, target_text = ?, direction = ?, note = ?, tags = ?, archived = ?, updated_at = ?
+      SET source_text = ?, target_text = ?, direction = ?, note = ?, tags = ?, archived = ?, synonyms = ?, antonyms = ?, category = ?, updated_at = ?
       WHERE id = ?`,
     args: [
       next.sourceText,
@@ -188,6 +210,9 @@ async function updateEntry(id, input) {
       next.note,
       JSON.stringify(next.tags),
       next.archived ? 1 : 0,
+      JSON.stringify(next.synonyms ?? []),
+      JSON.stringify(next.antonyms ?? []),
+      next.category ?? "",
       next.updatedAt,
       id,
     ],
@@ -312,6 +337,13 @@ function normalizeEntryInput(value, partial = false) {
     direction,
     note: String(input.note ?? "").trim(),
     tags: Array.isArray(input.tags) ? input.tags.map((tag) => String(tag).trim()).filter(Boolean) : [],
+    synonyms: Array.isArray(input.synonyms)
+      ? input.synonyms.map((item) => String(item).trim()).filter(Boolean).slice(0, 3)
+      : [],
+    antonyms: Array.isArray(input.antonyms)
+      ? input.antonyms.map((item) => String(item).trim()).filter(Boolean).slice(0, 3)
+      : [],
+    category: String(input.category ?? "").trim().slice(0, 30),
     archived: Boolean(input.archived),
     createdAt: typeof input.createdAt === "string" ? input.createdAt : now,
     updatedAt: typeof input.updatedAt === "string" ? input.updatedAt : now,
@@ -322,6 +354,9 @@ function rowToEntry(row) {
   return {
     ...row,
     tags: parseTags(row.tags),
+    synonyms: parseTags(row.synonyms),
+    antonyms: parseTags(row.antonyms),
+    category: typeof row.category === "string" ? row.category : "",
     archived: Boolean(row.archived),
   };
 }
