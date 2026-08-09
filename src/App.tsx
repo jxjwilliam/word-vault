@@ -1,138 +1,104 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Check, Copy, Pencil, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
 import {
-  Archive,
-  ArchiveRestore,
-  Download,
-  FileInput,
-  Import,
-  Pencil,
-  Plus,
-  RotateCcw,
-  Save,
-  Search,
-  Trash2,
-  X,
-} from "lucide-react";
-import {
-  createExportPayload,
+  categoryLabels,
+  categoryOf,
+  detectDirection,
   entryMatches,
-  normalizeTags,
-  parseImportPayload,
   sortEntries,
-  tagsToInput,
 } from "./dictionary";
-import {
-  createEntry,
-  deleteEntryById,
-  fetchEntries,
-  importAbbrs,
-  importEntries,
-  patchEntry,
-  updateEntry,
-} from "./api";
-import type { ArchiveFilter, DictionaryEntry, Direction, SortKey } from "./types";
+import { createEntry, deleteEntryById, fetchEntries, lookupWord, updateEntry } from "./api";
+import type { Category, CategoryFilter, DictionaryEntry, LookupResult } from "./types";
 
-type EntryForm = {
+type EditForm = {
   sourceText: string;
   targetText: string;
-  direction: Direction;
+  synonyms: string;
+  antonyms: string;
+  category: Category;
   note: string;
-  tags: string;
 };
 
-const emptyForm: EntryForm = {
+const emptyEditForm: EditForm = {
   sourceText: "",
   targetText: "",
-  direction: "en-to-zh",
+  synonyms: "",
+  antonyms: "",
+  category: "",
   note: "",
-  tags: "",
 };
 
-const sortLabels: Record<SortKey, string> = {
-  updatedAt: "最近更新",
-  createdAt: "创建时间",
-  sourceText: "原文 A-Z",
-  targetText: "译文 A-Z",
-};
+const splitList = (value: string): string[] =>
+  value
+    .split(/[，,]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 3);
 
-const archiveLabels: Record<ArchiveFilter, string> = {
-  active: "未归档",
-  archived: "已归档",
-  all: "全部",
-};
+const listToInput = (list: string[]): string => list.join(", ");
 
 export function App() {
   const [entries, setEntries] = useState<DictionaryEntry[]>([]);
-  const [form, setForm] = useState<EntryForm>(emptyForm);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("updatedAt");
-  const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>("active");
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>(emptyEditForm);
   const [isLoading, setIsLoading] = useState(true);
-  const [message, setMessage] = useState("正在从 SQLite 读取词库。");
-  const importInputRef = useRef<HTMLInputElement>(null);
-
-  const [isExtension, setIsExtension] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addText, setAddText] = useState("");
+  const [preview, setPreview] = useState<LookupResult | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [manualMode, setManualMode] = useState(false);
+  const [status, setStatus] = useState("");
+  const addInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    void refreshEntries("已从 SQLite 载入 abbrs.md 默认词库。");
+    void refreshEntries("已载入词库。");
   }, []);
 
-  // Chrome extension integration: check for context menu prefill/lookup data
+  // Chrome extension integration: prefill add input / search from context menu
   useEffect(() => {
-    const isExt = typeof chrome !== "undefined" && !!chrome.runtime?.id;
-    setIsExtension(isExt);
+    if (typeof chrome === "undefined" || !chrome.runtime?.id) return;
 
-    if (!isExt) return;
-
-    // Read any pending data from the background script
-    const loadPendingData = async () => {
+    const loadPending = async () => {
       try {
         const data = await chrome.runtime.sendMessage({ type: "get-prefill" });
-        if (!data) return;
-
-        if (data.wordVaultPrefill?.sourceText) {
-          setForm((prev) => ({
-            ...prev,
-            sourceText: data.wordVaultPrefill.sourceText,
-          }));
+        if (data?.wordVaultPrefill?.sourceText) {
           setEditingId(null);
-          setMessage(`已载入选中的文字："${data.wordVaultPrefill.sourceText}"`);
+          setEditForm(emptyEditForm);
+          setAddOpen(true);
+          setAddText(data.wordVaultPrefill.sourceText);
+          setManualMode(false);
+          setPreview(null);
+          setStatus("");
         }
-
-        if (data.wordVaultLookup?.query) {
+        if (data?.wordVaultLookup?.query) {
           setQuery(data.wordVaultLookup.query);
         }
-
-        // Clear the stored data so subsequent panel opens don't reuse it
         await chrome.runtime.sendMessage({ type: "clear-prefill" });
       } catch {
-        // Background script not reachable — running outside extension context
+        // Background script not reachable — running as plain web app
       }
     };
 
-    void loadPendingData();
+    void loadPending();
 
-    // Listen for real-time updates from background script
     const handleMessage = (message: { type: string }) => {
       if (message.type === "prefill-updated" || message.type === "lookup-updated") {
-        void loadPendingData();
+        void loadPending();
       }
     };
-
     chrome.runtime.onMessage.addListener(handleMessage);
-    return () => {
-      chrome.runtime.onMessage.removeListener(handleMessage);
-    };
+    return () => chrome.runtime.onMessage.removeListener(handleMessage);
   }, []);
 
   const refreshEntries = async (successMessage?: string) => {
     try {
-      const nextEntries = await fetchEntries();
-      setEntries(nextEntries);
-      setMessage(successMessage || "已同步 SQLite 词库。");
+      setEntries(await fetchEntries());
+      setStatus(successMessage || "已同步词库。");
     } catch {
-      setMessage("无法连接 SQLite API，请确认 npm run dev 正在运行。");
+      setStatus("无法连接词库 API。");
     } finally {
       setIsLoading(false);
     }
@@ -140,407 +106,503 @@ export function App() {
 
   const visibleEntries = useMemo(() => {
     const filtered = entries.filter((entry) => {
-      if (archiveFilter === "active" && entry.archived) return false;
-      if (archiveFilter === "archived" && !entry.archived) return false;
-
+      if (categoryFilter !== "all" && categoryOf(entry) !== categoryFilter) return false;
       return entryMatches(entry, query);
     });
+    return sortEntries(filtered, "updatedAt");
+  }, [entries, query, categoryFilter, categoryOf, entryMatches, sortEntries]);
 
-    return sortEntries(filtered, sortKey);
-  }, [archiveFilter, entries, query, sortKey]);
+  // ---- add / LLM flow ----
 
-  const stats = useMemo(
-    () => ({
-      total: entries.length,
-      active: entries.filter((entry) => !entry.archived).length,
-      archived: entries.filter((entry) => entry.archived).length,
-    }),
-    [entries],
-  );
-
-  const editingEntry = entries.find((entry) => entry.id === editingId);
-
-  const updateForm = (field: keyof EntryForm, value: string) => {
-    setForm((current) => ({ ...current, [field]: value }));
-  };
-
-  const resetForm = () => {
-    setForm(emptyForm);
+  const openAdd = () => {
     setEditingId(null);
+    setEditForm(emptyEditForm);
+    setAddOpen(true);
+    setManualMode(false);
+    setPreview(null);
+    setStatus("");
+    setTimeout(() => addInputRef.current?.focus(), 0);
   };
 
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault();
+  const addFromSearch = () => {
+    const word = query.trim();
+    if (!word) return;
+    setAddText(word);
+    openAdd();
+    void runLookup(word);
+  };
 
-    const sourceText = form.sourceText.trim();
-    const targetText = form.targetText.trim();
+  const startManual = () => {
+    setManualMode(true);
+    setEditForm((current) => ({ ...current, sourceText: addText }));
+  };
 
-    if (!sourceText || !targetText) {
-      setMessage("请填写原文和译文。");
-      return;
+  const resetAdd = () => {
+    setAddOpen(false);
+    setAddText("");
+    setPreview(null);
+    setManualMode(false);
+    setEditingId(null);
+    setEditForm(emptyEditForm);
+  };
+
+  const runLookup = async (overrideWord?: string) => {
+    const word = (overrideWord ?? addText).trim();
+    if (!word) return;
+    setPreviewLoading(true);
+    setPreview(null);
+    setStatus("");
+    try {
+      setPreview(await lookupWord(word));
+      setManualMode(false);
+    } catch (error) {
+      setStatus(error instanceof Error ? `翻译失败：${error.message}` : "翻译失败，请手动填写。");
+      startManual();
+    } finally {
+      setPreviewLoading(false);
     }
+  };
 
-    const tags = normalizeTags(form.tags);
-
-    if (editingId) {
-      try {
-        const updated = await updateEntry(editingId, {
-          sourceText,
-          targetText,
-          direction: form.direction,
-          note: form.note.trim(),
-          tags,
-          archived: editingEntry?.archived || false,
-        });
-        setEntries((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
-        setMessage("词条已更新到 SQLite。");
-        resetForm();
-      } catch {
-        setMessage("更新失败，请检查 SQLite API。");
-      }
-      return;
-    }
-
+  const saveFromPreview = async () => {
+    if (!preview) return;
+    const sourceText = addText.trim();
+    if (!sourceText) return;
     try {
       const entry = await createEntry({
         sourceText,
-        targetText,
-        direction: form.direction,
-        note: form.note.trim(),
-        tags,
+        targetText: preview.translation,
+        direction: preview.direction,
+        note: "",
+        tags: [],
+        synonyms: preview.synonyms,
+        antonyms: preview.antonyms,
+        category: "",
       });
       setEntries((current) => [entry, ...current]);
-      setMessage("新词条已保存到 SQLite。");
-      resetForm();
+      setStatus(`已保存「${sourceText}」。`);
+      resetAdd();
     } catch {
-      setMessage("保存失败，请检查 SQLite API。");
+      setStatus("保存失败，请检查 API。");
     }
   };
 
-  const startEditing = (entry: DictionaryEntry) => {
+  const retranslate = async () => {
+    const word = editForm.sourceText.trim();
+    if (!word) return;
+    setStatus("AI 翻译中…");
+    try {
+      const result = await lookupWord(word);
+      setEditForm((current) => ({
+        ...current,
+        targetText: result.translation,
+        synonyms: listToInput(result.synonyms),
+        antonyms: listToInput(result.antonyms),
+      }));
+      setStatus("");
+    } catch (error) {
+      setStatus(error instanceof Error ? `翻译失败：${error.message}` : "翻译失败。");
+    }
+  };
+
+  const saveManual = async (event: FormEvent) => {
+    event.preventDefault();
+    const sourceText = editForm.sourceText.trim();
+    const targetText = editForm.targetText.trim();
+    if (!sourceText || !targetText) {
+      setStatus("请填写单词和译文。");
+      return;
+    }
+    const payload = {
+      sourceText,
+      targetText,
+      direction: detectDirection(sourceText),
+      note: editForm.note.trim(),
+      tags: [],
+      synonyms: splitList(editForm.synonyms),
+      antonyms: splitList(editForm.antonyms),
+      category: editForm.category,
+    };
+    try {
+      if (editingId) {
+        const updated = await updateEntry(editingId, { ...payload, archived: false });
+        setEntries((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+        setStatus("已保存修改。");
+      } else {
+        const entry = await createEntry(payload);
+        setEntries((current) => [entry, ...current]);
+        setStatus(`已保存「${sourceText}」。`);
+      }
+      resetAdd();
+    } catch {
+      setStatus("保存失败，请检查 API。");
+    }
+  };
+
+  // ---- row actions ----
+
+  const startEdit = (entry: DictionaryEntry) => {
     setEditingId(entry.id);
-    setForm({
+    setEditForm({
       sourceText: entry.sourceText,
       targetText: entry.targetText,
-      direction: entry.direction,
+      synonyms: listToInput(entry.synonyms),
+      antonyms: listToInput(entry.antonyms),
+      category: entry.category,
       note: entry.note,
-      tags: tagsToInput(entry.tags),
     });
-    setMessage("正在编辑词条。");
+    setAddOpen(true);
+    setManualMode(true);
+    setPreview(null);
+    setAddText(entry.sourceText);
+    setExpandedId(null);
+    setStatus("");
   };
 
-  const toggleArchived = async (entry: DictionaryEntry) => {
-    try {
-      const updated = await patchEntry(entry.id, { archived: !entry.archived });
-      setEntries((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-      setMessage(entry.archived ? "词条已恢复到 SQLite。" : "词条已归档到 SQLite。");
-    } catch {
-      setMessage("归档状态更新失败，请检查 SQLite API。");
-    }
-  };
-
-  const deleteEntry = async (entry: DictionaryEntry) => {
-    const confirmed = window.confirm(`删除“${entry.sourceText}”？此操作不可撤销。`);
-    if (!confirmed) return;
-
+  const removeEntry = async (entry: DictionaryEntry) => {
+    if (!window.confirm(`删除「${entry.sourceText}」？此操作不可撤销。`)) return;
     try {
       await deleteEntryById(entry.id);
       setEntries((current) => current.filter((item) => item.id !== entry.id));
-      if (editingId === entry.id) resetForm();
-      setMessage("词条已从 SQLite 删除。");
+      if (editingId === entry.id) resetAdd();
+      setStatus("已删除。");
     } catch {
-      setMessage("删除失败，请检查 SQLite API。");
+      setStatus("删除失败。");
     }
   };
 
-  const importSample = async () => {
+  const copyTranslation = async (entry: DictionaryEntry) => {
     try {
-      const result = await importAbbrs();
-      setEntries(result.entries);
-      setMessage(result.added > 0 ? `已导入 ${result.added} 条示例词条到 SQLite。` : "示例词库没有新增词条。");
+      await navigator.clipboard.writeText(entry.targetText);
+      setStatus(`已复制译文：「${entry.targetText}」`);
     } catch {
-      setMessage("导入 abbrs.md 失败，请检查 SQLite API。");
+      setStatus("复制失败。");
     }
   };
-
-  const exportJson = () => {
-    const payload = createExportPayload(entries);
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: "application/json;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `local-dictionary-${new Date().toISOString().slice(0, 10)}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    setMessage("词库 JSON 已导出。");
-  };
-
-  const handleJsonImport = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const text = await file.text();
-      const incoming = parseImportPayload(text);
-      if (incoming.length === 0) {
-        setMessage("没有找到可导入的词条。");
-        return;
-      }
-
-      const result = await importEntries(incoming);
-      setEntries(result.entries);
-      setMessage(`已导入 ${result.added} 条新词条到 SQLite，处理 ${incoming.length} 条候选记录。`);
-    } catch {
-      setMessage("导入失败，请确认文件是本应用导出的 JSON。");
-    } finally {
-      event.target.value = "";
-    }
-  };
-
-  const duplicateEntry = async (entry: DictionaryEntry) => {
-    try {
-      const duplicated = await createEntry({
-        sourceText: entry.sourceText,
-        targetText: entry.targetText,
-        direction: entry.direction,
-        note: entry.note,
-        tags: entry.tags,
-      });
-      setEntries((current) => [duplicated, ...current]);
-      setMessage("已复制为 SQLite 新词条。");
-    } catch {
-      setMessage("复制失败，请检查 SQLite API。");
-    }
-  };
-
   return (
     <main className="app-shell">
-      <section className="workspace">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">
-              Local Dictionary
-              {isExtension && <span className="extension-badge">扩展</span>}
-            </p>
-            <h1>阅读生词库</h1>
-          </div>
-          <div className="stats" aria-label="词库统计">
-            <span>{stats.active} 未归档</span>
-            <span>{stats.archived} 已归档</span>
-            <span>{stats.total} 总计</span>
-          </div>
-        </header>
+      <header className="topbar">
+        <div className="brand">
+          <p className="eyebrow">TermVault</p>
+          <h1>术语库</h1>
+        </div>
 
-        <section className="toolbar" aria-label="词条工具栏">
-          <label className="search-field">
-            <Search size={18} aria-hidden="true" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索原文、译文、备注或标签"
-            />
-          </label>
+        <label className="search-field">
+          <Search size={16} aria-hidden="true" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="搜索单词 / 译文 / 同义词…"
+          />
+        </label>
 
-          <label className="select-field">
-            <span>排序</span>
-            <select value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)}>
-              {Object.entries(sortLabels).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
+        <label className="select-field">
+          <select
+            value={categoryFilter}
+            onChange={(event) => setCategoryFilter(event.target.value as CategoryFilter)}
+          >
+            <option value="all">全部分类</option>
+            <option value="ai">AI</option>
+            <option value="programming">编程</option>
+            <option value="general">通用</option>
+          </select>
+        </label>
 
-          <label className="select-field">
-            <span>视图</span>
-            <select
-              value={archiveFilter}
-              onChange={(event) => setArchiveFilter(event.target.value as ArchiveFilter)}
-            >
-              {Object.entries(archiveLabels).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
+        <button className="btn btn-primary" onClick={openAdd} type="button">
+          <Plus size={16} />
+          <span>添加</span>
+        </button>
+      </header>
 
-          <div className="toolbar-actions">
-            <button className="secondary-button" onClick={importSample} type="button" title="导入 abbrs.md">
-              <Import size={17} />
-              <span>导入示例词库</span>
-            </button>
-            <button
-              className="icon-button"
-              onClick={() => importInputRef.current?.click()}
-              type="button"
-              title="导入 JSON"
-            >
-              <FileInput size={18} />
-            </button>
-            <button className="icon-button" onClick={exportJson} type="button" title="导出 JSON">
-              <Download size={18} />
-            </button>
-            <input
-              ref={importInputRef}
-              className="hidden-input"
-              type="file"
-              accept="application/json,.json"
-              onChange={handleJsonImport}
-            />
-          </div>
-        </section>
-
-        <div className="content-grid">
-          <section className="entry-list" aria-label="词条列表">
-            <div className="list-header">
-              <h2>词条</h2>
-              <span>{visibleEntries.length} 条匹配</span>
+      {addOpen && (
+        <section className="add-bar">
+          {!preview && !manualMode && (
+            <div className="add-input-row">
+              <input
+                ref={addInputRef}
+                className="add-input"
+                value={addText}
+                onChange={(event) => setAddText(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void runLookup();
+                }}
+                placeholder="输入英文或中文单词，回车自动翻译…"
+              />
+              <button
+                className="btn btn-secondary"
+                onClick={() => void runLookup()}
+                type="button"
+                disabled={previewLoading}
+              >
+                <Sparkles size={15} />
+                <span>{previewLoading ? "翻译中…" : "AI 翻译"}</span>
+              </button>
+              <button className="manual-link" onClick={startManual} type="button">
+                手动填写
+              </button>
+              <button className="icon-btn" onClick={resetAdd} type="button" title="关闭">
+                <X size={16} />
+              </button>
             </div>
+          )}
 
-            {visibleEntries.length === 0 ? (
-              <div className="empty-state">
-                <p>没有匹配词条。</p>
-                <span>新增一个词，或导入示例词库开始使用。</span>
+          {preview && !manualMode && (
+            <div className="preview-card">
+              <div className="preview-main">
+                <h3>{addText}</h3>
+                <span className="direction-pill">
+                  {preview.direction === "en-to-zh" ? "英 → 中" : "中 → 英"}
+                </span>
+                <p className="translation">{preview.translation}</p>
               </div>
-            ) : (
-              <div className="entries">
-                {visibleEntries.map((entry) => (
-                  <article
-                    className={`entry-card ${entry.archived ? "archived" : ""} ${
-                      editingId === entry.id ? "selected" : ""
-                    }`}
-                    key={entry.id}
-                  >
-                    <div className="entry-main">
-                      <div>
-                        <div className="entry-title-row">
-                          <h3>{entry.sourceText}</h3>
-                          <span className="direction-pill">
-                            {entry.direction === "en-to-zh" ? "英到中" : "中到英"}
-                          </span>
-                        </div>
-                        <p className="translation">{entry.targetText}</p>
-                      </div>
-                      <div className="card-actions">
-                        <button onClick={() => startEditing(entry)} type="button" title="编辑">
-                          <Pencil size={17} />
-                        </button>
-                        <button onClick={() => duplicateEntry(entry)} type="button" title="复制为新词条">
-                          <Plus size={17} />
-                        </button>
-                        <button
-                          onClick={() => toggleArchived(entry)}
-                          type="button"
-                          title={entry.archived ? "恢复" : "归档"}
-                        >
-                          {entry.archived ? <ArchiveRestore size={17} /> : <Archive size={17} />}
-                        </button>
-                        <button onClick={() => deleteEntry(entry)} type="button" title="删除">
-                          <Trash2 size={17} />
-                        </button>
-                      </div>
-                    </div>
 
-                    {(entry.note || entry.tags.length > 0) && (
-                      <footer className="entry-meta">
-                        {entry.note && <span>{entry.note}</span>}
-                        {entry.tags.map((tag) => (
-                          <mark key={tag}>{tag}</mark>
-                        ))}
-                      </footer>
-                    )}
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <aside className="editor-panel" aria-label="词条编辑器">
-            <div className="editor-title">
-              <div>
-                <p className="eyebrow">{editingEntry ? "Edit Entry" : "New Entry"}</p>
-                <h2>{editingEntry ? "编辑词条" : "新增词条"}</h2>
-              </div>
-              {editingEntry && (
-                <button className="icon-button" onClick={resetForm} type="button" title="退出编辑">
-                  <X size={18} />
-                </button>
+              {preview.synonyms.length > 0 && (
+                <div className="syn-row">
+                  <span className="syn-label">同义</span>
+                  {preview.synonyms.map((item) => (
+                    <button
+                      key={item}
+                      className="syn-chip"
+                      type="button"
+                      onClick={() => setAddText(item)}
+                    >
+                      {item}
+                    </button>
+                  ))}
+                </div>
               )}
-            </div>
+              {preview.antonyms.length > 0 && (
+                <div className="syn-row">
+                  <span className="syn-label">反义</span>
+                  {preview.antonyms.map((item) => (
+                    <span key={item} className="syn-chip antonym">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              )}
 
-            <form className="entry-form" onSubmit={handleSubmit}>
-              <label>
-                <span>方向</span>
+              <div className="preview-actions">
+                <button className="btn btn-primary" onClick={() => void saveFromPreview()} type="button">
+                  <Check size={15} />
+                  <span>保存</span>
+                </button>
+                <button className="btn btn-secondary" onClick={startManual} type="button">
+                  手动修改
+                </button>
+              </div>
+            </div>
+          )}
+
+          {manualMode && (
+            <form className="inline-form" onSubmit={saveManual}>
+              <label className="field">
+                <span>单词</span>
+                <input
+                  value={editForm.sourceText}
+                  onChange={(event) =>
+                    setEditForm((current) => ({ ...current, sourceText: event.target.value }))
+                  }
+                  placeholder="agent"
+                />
+              </label>
+              <label className="field">
+                <span>译文</span>
+                <input
+                  value={editForm.targetText}
+                  onChange={(event) =>
+                    setEditForm((current) => ({ ...current, targetText: event.target.value }))
+                  }
+                  placeholder="智能体"
+                />
+              </label>
+              <div className="form-actions">
+                <button className="btn btn-secondary" onClick={() => void retranslate()} type="button">
+                  <Sparkles size={14} />
+                  <span>AI 重译</span>
+                </button>
+              </div>
+              <label className="field">
+                <span>同义词（逗号分隔，最多 3 个）</span>
+                <input
+                  value={editForm.synonyms}
+                  onChange={(event) =>
+                    setEditForm((current) => ({ ...current, synonyms: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>反义词（逗号分隔，最多 3 个）</span>
+                <input
+                  value={editForm.antonyms}
+                  onChange={(event) =>
+                    setEditForm((current) => ({ ...current, antonyms: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>分类</span>
                 <select
-                  value={form.direction}
-                  onChange={(event) => updateForm("direction", event.target.value as Direction)}
+                  value={editForm.category}
+                  onChange={(event) =>
+                    setEditForm((current) => ({
+                      ...current,
+                      category: event.target.value as Category,
+                    }))
+                  }
                 >
-                  <option value="en-to-zh">英文到中文</option>
-                  <option value="zh-to-en">中文到英文</option>
+                  <option value="">未分类</option>
+                  <option value="ai">AI</option>
+                  <option value="programming">编程</option>
+                  <option value="general">通用</option>
                 </select>
               </label>
-
-              <label>
-                <span>原文</span>
+              <label className="field">
+                <span>备注（可选）</span>
                 <textarea
-                  value={form.sourceText}
-                  onChange={(event) => updateForm("sourceText", event.target.value)}
-                  placeholder="perceive"
-                  rows={3}
+                  value={editForm.note}
+                  onChange={(event) =>
+                    setEditForm((current) => ({ ...current, note: event.target.value }))
+                  }
+                  rows={2}
                 />
               </label>
-
-              <label>
-                <span>译文</span>
-                <textarea
-                  value={form.targetText}
-                  onChange={(event) => updateForm("targetText", event.target.value)}
-                  placeholder="感知"
-                  rows={3}
-                />
-              </label>
-
-              <label>
-                <span>标签</span>
-                <input
-                  value={form.tags}
-                  onChange={(event) => updateForm("tags", event.target.value)}
-                  placeholder="AI, reading"
-                />
-              </label>
-
-              <label>
-                <span>备注</span>
-                <textarea
-                  value={form.note}
-                  onChange={(event) => updateForm("note", event.target.value)}
-                  placeholder="来源、语境或记忆提示"
-                  rows={4}
-                />
-              </label>
-
               <div className="form-actions">
-                <button className="primary-button" type="submit">
-                  <Save size={18} />
-                  <span>{editingEntry ? "保存修改" : "保存词条"}</span>
+                <button className="btn btn-primary" type="submit">
+                  <Check size={15} />
+                  <span>{editingId ? "保存修改" : "保存"}</span>
                 </button>
-                <button className="secondary-button" onClick={resetForm} type="button">
-                  <RotateCcw size={17} />
-                  <span>清空</span>
+                <button className="btn btn-ghost" onClick={resetAdd} type="button">
+                  <X size={15} />
+                  <span>取消</span>
                 </button>
               </div>
             </form>
+          )}
+        </section>
+      )}
 
-            <p className="status-message" role="status">
-              {message}
-            </p>
-          </aside>
+      <div className="table">
+        <div className="table-header">
+          <span>单词</span>
+          <span>译文</span>
+          <span>分类</span>
+          <span />
         </div>
-      </section>
+
+        {isLoading ? (
+          <div className="empty-state">
+            <p>加载中…</p>
+          </div>
+        ) : visibleEntries.length === 0 ? (
+          <div className="empty-state">
+            {query.trim() ? (
+              <>
+                <p>「{query.trim()}」不在词库中。</p>
+                <button className="btn btn-primary" type="button" onClick={addFromSearch}>
+                  <Sparkles size={15} />
+                  <span>自动添加（AI 翻译）</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <p>没有匹配词条。</p>
+                <span>点击右上角「添加」，输入一个词即可自动翻译建库。</span>
+              </>
+            )}
+          </div>
+        ) : (
+          visibleEntries.map((entry) => {
+            const expanded = expandedId === entry.id;
+            const cat = categoryOf(entry);
+            return (
+              <div key={entry.id}>
+                <div
+                  className={`tbl-row ${expanded ? "selected" : ""}`}
+                  onClick={() => setExpandedId(expanded ? null : entry.id)}
+                >
+                  <span className="row-word" title={entry.sourceText}>
+                    {entry.sourceText}
+                  </span>
+                  <span className="row-trans" title={entry.targetText}>
+                    {entry.targetText}
+                  </span>
+                  <span>
+                    {cat ? <span className={`chip chip-${cat}`}>{categoryLabels[cat]}</span> : null}
+                  </span>
+                  <span className="row-actions" onClick={(event) => event.stopPropagation()}>
+                    <button
+                      className="icon-btn"
+                      type="button"
+                      title="复制译文"
+                      onClick={() => void copyTranslation(entry)}
+                    >
+                      <Copy size={14} />
+                    </button>
+                    <button
+                      className="icon-btn"
+                      type="button"
+                      title="编辑"
+                      onClick={() => startEdit(entry)}
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      className="icon-btn"
+                      type="button"
+                      title="删除"
+                      onClick={() => void removeEntry(entry)}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </span>
+                </div>
+
+                {expanded && (
+                  <div className="row-expand">
+                    <div className="expand-meta">
+                      {entry.synonyms.length > 0 && (
+                        <div className="syn-row">
+                          <span className="syn-label">同义</span>
+                          {entry.synonyms.map((item) => (
+                            <button
+                              key={item}
+                              className="syn-chip"
+                              type="button"
+                              onClick={() => {
+                                setQuery(item);
+                                setExpandedId(null);
+                              }}
+                            >
+                              {item}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {entry.antonyms.length > 0 && (
+                        <div className="syn-row">
+                          <span className="syn-label">反义</span>
+                          {entry.antonyms.map((item) => (
+                            <span key={item} className="syn-chip antonym">
+                              {item}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {entry.note && <p className="note">{entry.note}</p>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {status && (
+        <p className="status" role="status">
+          {status}
+        </p>
+      )}
     </main>
   );
 }
