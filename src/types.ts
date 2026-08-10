@@ -1,11 +1,18 @@
 export type Direction = "en-to-zh" | "zh-to-en";
 
+export type LookupMeaning = {
+  pos: string;
+  text: string;
+};
+
 export type Category = "" | "ai" | "programming" | "general";
 export type CategoryFilter = "all" | Category;
 export type LookupResult = {
   translation: string;
+  meanings: LookupMeaning[];
   synonyms: string[];
   antonyms: string[];
+  examples: string[];
   direction: Direction;
 };
 

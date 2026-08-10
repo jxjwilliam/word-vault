@@ -320,11 +320,12 @@ async function lookupWord(word) {
         {
           role: "system",
           content:
-            "You are a technical translator for AI and programming terms. " +
-            "Give domain-correct Chinese translations, never literal ones " +
+            "You are a technical bilingual dictionary for AI and programming terms. " +
+            "If the input is English, return the best natural Chinese translation; if the input is Chinese, return the best natural English technical term. " +
+            "Never translate literally when a domain term has an established form " +
             "(e.g. RAG → 检索增强生成, embedding → 向量嵌入, backpressure → 背压). " +
-            'Respond ONLY with a JSON object: {"translation": string, "synonyms": string[], "antonyms": string[]} ' +
-            "with at most 3 items in each array (empty arrays allowed when none exist).",
+            'Respond ONLY with a JSON object: {"translation": string, "meanings": [{"pos": string, "text": string}], "synonyms": string[], "antonyms": string[], "examples": string[]} ' +
+            "with at most 3 meanings, 3 synonyms/antonyms, and 2 short examples.",
         },
         { role: "user", content: `Translate this term: ${word}` },
       ],
@@ -356,11 +357,23 @@ async function lookupWord(word) {
 
   return {
     translation: String(parsed.translation ?? "").trim(),
+    meanings: Array.isArray(parsed.meanings)
+      ? parsed.meanings
+          .map((item) => ({
+            pos: String(item?.pos ?? "").trim(),
+            text: String(item?.text ?? "").trim(),
+          }))
+          .filter((item) => item.pos || item.text)
+          .slice(0, 3)
+      : [],
     synonyms: Array.isArray(parsed.synonyms)
       ? parsed.synonyms.map((item) => String(item).trim()).filter(Boolean).slice(0, 3)
       : [],
     antonyms: Array.isArray(parsed.antonyms)
       ? parsed.antonyms.map((item) => String(item).trim()).filter(Boolean).slice(0, 3)
+      : [],
+    examples: Array.isArray(parsed.examples)
+      ? parsed.examples.map((item) => String(item).trim()).filter(Boolean).slice(0, 2)
       : [],
     direction,
   };

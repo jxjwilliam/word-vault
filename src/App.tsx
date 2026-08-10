@@ -1,22 +1,21 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Copy, Pencil, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
-import {
-  categoryLabels,
-  categoryOf,
-  detectDirection,
-  entryMatches,
-  sortEntries,
-} from "./dictionary";
+import { detectDirection, entryMatches, sortEntries } from "./dictionary";
 import { createEntry, deleteEntryById, fetchEntries, lookupWord, updateEntry } from "./api";
-import type { Category, CategoryFilter, DictionaryEntry, LookupResult } from "./types";
+import type { Category, DictionaryEntry, LookupMeaning, LookupResult } from "./types";
 
 type EditForm = {
   sourceText: string;
   targetText: string;
   synonyms: string;
   antonyms: string;
-  category: Category;
   note: string;
+};
+
+type PreviewItem = LookupResult & {
+  sourceText: string;
+  targetText: string;
+  originalText: string;
 };
 
 const emptyEditForm: EditForm = {
@@ -24,7 +23,6 @@ const emptyEditForm: EditForm = {
   targetText: "",
   synonyms: "",
   antonyms: "",
-  category: "",
   note: "",
 };
 
@@ -37,17 +35,42 @@ const splitList = (value: string): string[] =>
 
 const listToInput = (list: string[]): string => list.join(", ");
 
+const isChineseText = (value: string) => /[\u4e00-\u9fff]/.test(value);
+
+const normalizePreview = (inputText: string, lookup: LookupResult): PreviewItem => {
+  const trimmedInput = inputText.trim();
+  const sourceText = isChineseText(trimmedInput)
+    ? lookup.translation || trimmedInput
+    : trimmedInput;
+  const targetText = isChineseText(trimmedInput)
+    ? trimmedInput
+    : lookup.translation;
+
+  return {
+    ...lookup,
+    sourceText,
+    targetText,
+    originalText: trimmedInput,
+  };
+};
+
+const uniqueStrings = (values: string[]) => Array.from(new Set(values.filter(Boolean)));
+
+const meaningLabel = (meaning: LookupMeaning) =>
+  meaning.pos ? `${meaning.pos} · ${meaning.text}` : meaning.text;
+
 export function App() {
   const [entries, setEntries] = useState<DictionaryEntry[]>([]);
   const [query, setQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [detailCache, setDetailCache] = useState<Record<string, LookupResult>>({});
+  const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm>(emptyEditForm);
   const [isLoading, setIsLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [addText, setAddText] = useState("");
-  const [preview, setPreview] = useState<LookupResult | null>(null);
+  const [preview, setPreview] = useState<PreviewItem | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [manualMode, setManualMode] = useState(false);
   const [status, setStatus] = useState("");
@@ -105,12 +128,37 @@ export function App() {
   };
 
   const visibleEntries = useMemo(() => {
-    const filtered = entries.filter((entry) => {
-      if (categoryFilter !== "all" && categoryOf(entry) !== categoryFilter) return false;
-      return entryMatches(entry, query);
-    });
-    return sortEntries(filtered, "updatedAt");
-  }, [entries, query, categoryFilter, categoryOf, entryMatches, sortEntries]);
+    return sortEntries(entries.filter((entry) => entryMatches(entry, query)), "updatedAt");
+  }, [entries, query]);
+
+  useEffect(() => {
+    if (!expandedId) return;
+    if (detailCache[expandedId]) return;
+
+    const entry = entries.find((item) => item.id === expandedId);
+    if (!entry) return;
+
+    let cancelled = false;
+    setDetailLoadingId(expandedId);
+
+    void lookupWord(entry.sourceText)
+      .then((detail) => {
+        if (cancelled) return;
+        setDetailCache((current) => ({ ...current, [entry.id]: detail }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setStatus(`「${entry.sourceText}」的更多释义加载失败。`);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setDetailLoadingId((current) => (current === expandedId ? null : current));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [expandedId, detailCache, entries]);
 
   // ---- add / LLM flow ----
 
@@ -153,7 +201,7 @@ export function App() {
     setPreview(null);
     setStatus("");
     try {
-      setPreview(await lookupWord(word));
+      setPreview(normalizePreview(word, await lookupWord(word)));
       setManualMode(false);
     } catch (error) {
       setStatus(error instanceof Error ? `翻译失败：${error.message}` : "翻译失败，请手动填写。");
@@ -165,13 +213,14 @@ export function App() {
 
   const saveFromPreview = async () => {
     if (!preview) return;
-    const sourceText = addText.trim();
-    if (!sourceText) return;
+    const sourceText = preview.sourceText.trim();
+    const targetText = preview.targetText.trim();
+    if (!sourceText || !targetText) return;
     try {
       const entry = await createEntry({
         sourceText,
-        targetText: preview.translation,
-        direction: preview.direction,
+        targetText,
+        direction: detectDirection(sourceText),
         note: "",
         tags: [],
         synonyms: preview.synonyms,
@@ -220,7 +269,7 @@ export function App() {
       tags: [],
       synonyms: splitList(editForm.synonyms),
       antonyms: splitList(editForm.antonyms),
-      category: editForm.category,
+      category: "" as Category,
     };
     try {
       if (editingId) {
@@ -247,7 +296,6 @@ export function App() {
       targetText: entry.targetText,
       synonyms: listToInput(entry.synonyms),
       antonyms: listToInput(entry.antonyms),
-      category: entry.category,
       note: entry.note,
     });
     setAddOpen(true);
@@ -263,6 +311,11 @@ export function App() {
     try {
       await deleteEntryById(entry.id);
       setEntries((current) => current.filter((item) => item.id !== entry.id));
+      setDetailCache((current) => {
+        const next = { ...current };
+        delete next[entry.id];
+        return next;
+      });
       if (editingId === entry.id) resetAdd();
       setStatus("已删除。");
     } catch {
@@ -313,18 +366,6 @@ export function App() {
           ) : null}
         </label>
 
-        <label className="select-field">
-          <select
-            value={categoryFilter}
-            onChange={(event) => setCategoryFilter(event.target.value as CategoryFilter)}
-          >
-            <option value="all">全部分类</option>
-            <option value="ai">AI</option>
-            <option value="programming">编程</option>
-            <option value="general">通用</option>
-          </select>
-        </label>
-
         <button className="btn btn-primary" onClick={openAdd} type="button">
           <Plus size={16} />
           <span>添加</span>
@@ -366,12 +407,26 @@ export function App() {
           {preview && !manualMode && (
             <div className="preview-card">
               <div className="preview-main">
-                <h3>{addText}</h3>
-                <span className="direction-pill">
-                  {preview.direction === "en-to-zh" ? "英 → 中" : "中 → 英"}
-                </span>
-                <p className="translation">{preview.translation}</p>
+                <div className="preview-head">
+                  <h3>{preview.sourceText}</h3>
+                  <span className="direction-pill">英 → 中</span>
+                </div>
+                <p className="translation">{preview.targetText}</p>
+                {preview.originalText !== preview.sourceText && (
+                  <p className="source-hint">已识别输入「{preview.originalText}」，自动匹配英文词条</p>
+                )}
               </div>
+
+              {preview.meanings.length > 0 && (
+                <div className="detail-block">
+                  <span className="detail-title">更多含义</span>
+                  <ul className="detail-list">
+                    {preview.meanings.map((meaning) => (
+                      <li key={`${meaning.pos}-${meaning.text}`}>{meaningLabel(meaning)}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {preview.synonyms.length > 0 && (
                 <div className="syn-row">
@@ -396,6 +451,17 @@ export function App() {
                       {item}
                     </span>
                   ))}
+                </div>
+              )}
+
+              {preview.examples.length > 0 && (
+                <div className="detail-block">
+                  <span className="detail-title">简单例子</span>
+                  <ul className="detail-list">
+                    {preview.examples.map((example) => (
+                      <li key={example}>{example}</li>
+                    ))}
+                  </ul>
                 </div>
               )}
 
@@ -458,23 +524,6 @@ export function App() {
                 />
               </label>
               <label className="field">
-                <span>分类</span>
-                <select
-                  value={editForm.category}
-                  onChange={(event) =>
-                    setEditForm((current) => ({
-                      ...current,
-                      category: event.target.value as Category,
-                    }))
-                  }
-                >
-                  <option value="">未分类</option>
-                  <option value="ai">AI</option>
-                  <option value="programming">编程</option>
-                  <option value="general">通用</option>
-                </select>
-              </label>
-              <label className="field">
                 <span>备注（可选）</span>
                 <textarea
                   value={editForm.note}
@@ -503,8 +552,6 @@ export function App() {
         <div className="table-header">
           <span>单词</span>
           <span>译文</span>
-          <span>分类</span>
-          <span />
         </div>
 
         {isLoading ? (
@@ -531,7 +578,11 @@ export function App() {
         ) : (
           visibleEntries.map((entry) => {
             const expanded = expandedId === entry.id;
-            const cat = categoryOf(entry);
+            const detail = detailCache[entry.id];
+            const meanings = detail?.meanings ?? [];
+            const examples = detail?.examples ?? [];
+            const synonyms = uniqueStrings([...(detail?.synonyms ?? []), ...entry.synonyms]);
+            const antonyms = uniqueStrings([...(detail?.antonyms ?? []), ...entry.antonyms]);
             return (
               <div key={entry.id}>
                 <div
@@ -543,9 +594,6 @@ export function App() {
                   </span>
                   <span className="row-trans" title={entry.targetText}>
                     {entry.targetText}
-                  </span>
-                  <span>
-                    {cat ? <span className={`chip chip-${cat}`}>{categoryLabels[cat]}</span> : null}
                   </span>
                   <span className="row-actions" onClick={(event) => event.stopPropagation()}>
                     <button
@@ -578,10 +626,25 @@ export function App() {
                 {expanded && (
                   <div className="row-expand">
                     <div className="expand-meta">
-                      {entry.synonyms.length > 0 && (
+                      {detailLoadingId === entry.id && !detail && (
+                        <p className="note">更多含义加载中…</p>
+                      )}
+
+                      {meanings.length > 0 && (
+                        <div className="detail-block">
+                          <span className="detail-title">更多含义</span>
+                          <ul className="detail-list">
+                            {meanings.map((meaning) => (
+                              <li key={`${meaning.pos}-${meaning.text}`}>{meaningLabel(meaning)}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {synonyms.length > 0 && (
                         <div className="syn-row">
                           <span className="syn-label">同义</span>
-                          {entry.synonyms.map((item) => (
+                          {synonyms.map((item) => (
                             <button
                               key={item}
                               className="syn-chip"
@@ -596,14 +659,24 @@ export function App() {
                           ))}
                         </div>
                       )}
-                      {entry.antonyms.length > 0 && (
+                      {antonyms.length > 0 && (
                         <div className="syn-row">
                           <span className="syn-label">反义</span>
-                          {entry.antonyms.map((item) => (
+                          {antonyms.map((item) => (
                             <span key={item} className="syn-chip antonym">
                               {item}
                             </span>
                           ))}
+                        </div>
+                      )}
+                      {examples.length > 0 && (
+                        <div className="detail-block">
+                          <span className="detail-title">简单例子</span>
+                          <ul className="detail-list">
+                            {examples.map((example) => (
+                              <li key={example}>{example}</li>
+                            ))}
+                          </ul>
                         </div>
                       )}
                       {entry.note && <p className="note">{entry.note}</p>}
