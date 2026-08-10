@@ -59,6 +59,27 @@ const uniqueStrings = (values: string[]) => Array.from(new Set(values.filter(Boo
 const meaningLabel = (meaning: LookupMeaning) =>
   meaning.pos ? `${meaning.pos} · ${meaning.text}` : meaning.text;
 
+const normalizeLookupKey = (value: string) => value.trim().toLowerCase();
+
+const findExactEntry = (entries: DictionaryEntry[], value: string) => {
+  const key = normalizeLookupKey(value);
+  return entries.find(
+    (entry) => normalizeLookupKey(entry.sourceText) === key || normalizeLookupKey(entry.targetText) === key,
+  );
+};
+
+const buildExactPreview = (inputText: string, entry: DictionaryEntry): PreviewItem => ({
+  translation: entry.targetText,
+  meanings: [],
+  synonyms: entry.synonyms,
+  antonyms: entry.antonyms,
+  examples: [],
+  direction: detectDirection(entry.sourceText),
+  sourceText: entry.sourceText,
+  targetText: entry.targetText,
+  originalText: inputText.trim(),
+});
+
 export function App() {
   const [entries, setEntries] = useState<DictionaryEntry[]>([]);
   const [query, setQuery] = useState("");
@@ -201,7 +222,12 @@ export function App() {
     setPreview(null);
     setStatus("");
     try {
-      setPreview(normalizePreview(word, await lookupWord(word)));
+      const exactEntry = findExactEntry(entries, word);
+      if (exactEntry) {
+        setPreview(buildExactPreview(word, exactEntry));
+      } else {
+        setPreview(normalizePreview(word, await lookupWord(word)));
+      }
       setManualMode(false);
     } catch (error) {
       setStatus(error instanceof Error ? `翻译失败：${error.message}` : "翻译失败，请手动填写。");
