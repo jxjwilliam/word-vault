@@ -24,6 +24,7 @@ export type DictionaryEntry = {
   note: string;
   tags: string[];
   archived: boolean;
+  starred: boolean;
   synonyms: string[];
   antonyms: string[];
   category: Category;

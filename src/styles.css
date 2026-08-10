@@ -93,6 +93,16 @@ body {
 .select-field select:hover { border-color: var(--border-strong); }
 .select-field select:focus { border-color: var(--primary); box-shadow: var(--ring); }
 
+.sort-field { flex-shrink: 0; }
+.sort-field select {
+  height: 36px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); padding: 0 10px; font-size: 13px; color: var(--text-secondary);
+  outline: 0; cursor: pointer; font-family: inherit; box-shadow: var(--shadow-sm);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.sort-field select:hover { border-color: var(--border-strong); }
+.sort-field select:focus { border-color: var(--primary); box-shadow: var(--ring); }
+
 /* ---- buttons ---- */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -131,6 +141,7 @@ body {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
   padding: 12px; margin-bottom: 14px; box-shadow: var(--shadow-sm);
 }
+.add-input-wrap { position: relative; }
 .add-input-row { display: flex; align-items: center; gap: 8px; }
 .add-input {
   flex: 1; min-width: 0; height: 36px; border: 1px solid var(--border); border-radius: var(--radius);
@@ -141,6 +152,38 @@ body {
 .add-input::placeholder { color: var(--text-faint); }
 .add-input:hover { border-color: var(--border-strong); }
 .add-input:focus { border-color: var(--primary); box-shadow: var(--ring); }
+
+.autocomplete-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
+}
+.autocomplete-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  border-bottom: 1px solid #f1f2f4;
+  background: transparent;
+  padding: 10px 12px;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.autocomplete-item:last-child { border-bottom: 0; }
+.autocomplete-item:hover { background: var(--surface-soft); }
+.autocomplete-source { font-weight: 600; color: var(--text); }
+.autocomplete-target { color: var(--text-muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.highlight { background: #fde68a; color: inherit; padding: 0 1px; border-radius: 3px; }
 
 .preview-card {
   margin-top: 10px; padding: 14px; background: var(--surface-soft);
@@ -226,6 +269,7 @@ body {
 .tbl-row.selected { background: var(--primary-soft); box-shadow: inset 2px 0 0 var(--primary); }
 
 .row-word { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-star { color: #f59e0b; margin-right: 6px; vertical-align: -1px; }
 .row-trans { color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .row-actions {
@@ -271,8 +315,11 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   .topbar { flex-wrap: wrap; gap: 8px; }
   .brand { flex: 1 1 100%; margin-right: 0; }
   .search-field { flex: 1 1 auto; }
+  .sort-field select { max-width: 100%; }
   .add-input-row { flex-wrap: wrap; }
   .add-input { flex: 1 1 100%; }
+  .autocomplete-item { flex-wrap: wrap; }
+  .autocomplete-target { width: 100%; }
   .table-header, .tbl-row { gap: 6px; padding: 0 10px; }
   .tbl-row { padding-right: 92px; }
   .preview-card { padding: 12px; }

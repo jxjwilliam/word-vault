@@ -46,6 +46,7 @@ async function initSchema() {
       note TEXT NOT NULL DEFAULT '',
       tags TEXT NOT NULL DEFAULT '[]',
       archived INTEGER NOT NULL DEFAULT 0,
+      starred INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )
@@ -78,6 +79,9 @@ async function initSchema() {
   }
   if (!existingColumns.has("category")) {
     await db.execute(`ALTER TABLE entries ADD COLUMN category TEXT NOT NULL DEFAULT ''`);
+  }
+  if (!existingColumns.has("starred")) {
+    await db.execute(`ALTER TABLE entries ADD COLUMN starred INTEGER NOT NULL DEFAULT 0`);
   }
 }
 
@@ -132,6 +136,7 @@ async function listEntries() {
       synonyms,
       antonyms,
       category,
+      starred,
       archived,
       created_at AS createdAt,
       updated_at AS updatedAt
@@ -153,6 +158,7 @@ async function getEntry(id) {
       synonyms,
       antonyms,
       category,
+      starred,
       archived,
       created_at AS createdAt,
       updated_at AS updatedAt
@@ -172,8 +178,8 @@ async function getEntry(id) {
 async function insertEntry(entry) {
   await db.execute({
     sql: `INSERT INTO entries (
-      id, source_text, target_text, direction, note, tags, archived, synonyms, antonyms, category, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, source_text, target_text, direction, note, tags, archived, starred, synonyms, antonyms, category, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       entry.id,
       entry.sourceText,
@@ -182,6 +188,7 @@ async function insertEntry(entry) {
       entry.note,
       JSON.stringify(entry.tags),
       entry.archived ? 1 : 0,
+      entry.starred ? 1 : 0,
       JSON.stringify(entry.synonyms ?? []),
       JSON.stringify(entry.antonyms ?? []),
       entry.category ?? "",
@@ -204,7 +211,7 @@ async function updateEntry(id, input) {
 
   await db.execute({
     sql: `UPDATE entries
-      SET source_text = ?, target_text = ?, direction = ?, note = ?, tags = ?, archived = ?, synonyms = ?, antonyms = ?, category = ?, updated_at = ?
+      SET source_text = ?, target_text = ?, direction = ?, note = ?, tags = ?, archived = ?, starred = ?, synonyms = ?, antonyms = ?, category = ?, updated_at = ?
       WHERE id = ?`,
     args: [
       next.sourceText,
@@ -213,6 +220,7 @@ async function updateEntry(id, input) {
       next.note,
       JSON.stringify(next.tags),
       next.archived ? 1 : 0,
+      next.starred ? 1 : 0,
       JSON.stringify(next.synonyms ?? []),
       JSON.stringify(next.antonyms ?? []),
       next.category ?? "",
@@ -227,11 +235,12 @@ async function updateEntry(id, input) {
 async function patchEntry(id, body) {
   const existing = await getEntry(id);
   const archived = typeof body.archived === "boolean" ? body.archived : existing.archived;
+  const starred = typeof body.starred === "boolean" ? body.starred : existing.starred;
   const updatedAt = new Date().toISOString();
 
   await db.execute({
-    sql: "UPDATE entries SET archived = ?, updated_at = ? WHERE id = ?",
-    args: [archived ? 1 : 0, updatedAt, id],
+    sql: "UPDATE entries SET archived = ?, starred = ?, updated_at = ? WHERE id = ?",
+    args: [archived ? 1 : 0, starred ? 1 : 0, updatedAt, id],
   });
 
   return getEntry(id);
@@ -473,6 +482,7 @@ function rowToEntry(row) {
     antonyms: parseTags(row.antonyms),
     category: typeof row.category === "string" ? row.category : "",
     archived: Boolean(row.archived),
+    starred: Boolean(row.starred),
   };
 }
 

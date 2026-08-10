@@ -45,7 +45,15 @@ export const fetchEntries = async () => {
 export const createEntry = async (
   entry: Pick<
     DictionaryEntry,
-    "sourceText" | "targetText" | "direction" | "note" | "tags" | "synonyms" | "antonyms" | "category"
+    | "sourceText"
+    | "targetText"
+    | "direction"
+    | "note"
+    | "tags"
+    | "synonyms"
+    | "antonyms"
+    | "category"
+    | "starred"
   >,
 ) => {
   const payload = await requestJson<EntryResponse>(api("/api/entries"), {
@@ -69,6 +77,7 @@ export const updateEntry = async (
     | "antonyms"
     | "category"
     | "archived"
+    | "starred"
   >,
 ) => {
   const payload = await requestJson<EntryResponse>(api(`/api/entries/${encodeURIComponent(id)}`), {
@@ -79,7 +88,10 @@ export const updateEntry = async (
   return payload.entry;
 };
 
-export const patchEntry = async (id: string, patch: Partial<Pick<DictionaryEntry, "archived">>) => {
+export const patchEntry = async (
+  id: string,
+  patch: Partial<Pick<DictionaryEntry, "archived" | "starred">>,
+) => {
   const payload = await requestJson<EntryResponse>(api(`/api/entries/${encodeURIComponent(id)}`), {
     method: "PATCH",
     body: JSON.stringify(patch),

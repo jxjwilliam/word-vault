@@ -1,8 +1,10 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Copy, Pencil, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
-import { detectDirection, entryMatches, sortEntries } from "./dictionary";
+import { Fragment, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Check, Copy, Pencil, Plus, Search, Sparkles, Star, Trash2, X } from "lucide-react";
+import { detectDirection, entryMatches, normalizeSearchValue } from "./dictionary";
 import { createEntry, deleteEntryById, fetchEntries, lookupWord, updateEntry } from "./api";
 import type { Category, DictionaryEntry, LookupMeaning, LookupResult } from "./types";
+
+type SortMode = "time-desc" | "word-asc" | "word-desc";
 
 type EditForm = {
   sourceText: string;
@@ -59,6 +61,62 @@ const uniqueStrings = (values: string[]) => Array.from(new Set(values.filter(Boo
 const meaningLabel = (meaning: LookupMeaning) =>
   meaning.pos ? `${meaning.pos} · ${meaning.text}` : meaning.text;
 
+const highlightText = (text: string, query: string) => {
+  const normalizedQuery = normalizeSearchValue(query);
+  if (!normalizedQuery) return text;
+
+  const normalizedText = normalizeSearchValue(text);
+  if (!normalizedText) return text;
+
+  const exactIndex = normalizedText.indexOf(normalizedQuery);
+  if (exactIndex !== -1) {
+    const before = text.slice(0, exactIndex);
+    const match = text.slice(exactIndex, exactIndex + query.trim().length);
+    const after = text.slice(exactIndex + query.trim().length);
+    return (
+      <>
+        {before}
+        <mark className="highlight">{match}</mark>
+        {after}
+      </>
+    );
+  }
+
+  let searchIndex = 0;
+  const matchedIndexes = new Set<number>();
+  for (const char of normalizedQuery) {
+    const foundIndex = normalizedText.indexOf(char, searchIndex);
+    if (foundIndex === -1) return text;
+    matchedIndexes.add(foundIndex);
+    searchIndex = foundIndex + 1;
+  }
+
+  const segments: JSX.Element[] = [];
+  let buffer = "";
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (matchedIndexes.has(index)) {
+      if (buffer) {
+        segments.push(<Fragment key={`t-${index}-plain`}>{buffer}</Fragment>);
+        buffer = "";
+      }
+      segments.push(
+        <mark key={`t-${index}-match`} className="highlight">
+          {character}
+        </mark>,
+      );
+    } else {
+      buffer += character;
+    }
+  }
+
+  if (buffer) {
+    segments.push(<Fragment key="t-tail">{buffer}</Fragment>);
+  }
+
+  return segments.length > 0 ? segments : text;
+};
+
 const normalizeLookupKey = (value: string) => value.trim().toLowerCase();
 
 const findExactEntry = (entries: DictionaryEntry[], value: string) => {
@@ -80,9 +138,33 @@ const buildExactPreview = (inputText: string, entry: DictionaryEntry): PreviewIt
   originalText: inputText.trim(),
 });
 
+const getAutocompleteSuggestions = (entries: DictionaryEntry[], value: string) => {
+  const normalizedValue = normalizeSearchValue(value);
+  if (!normalizedValue) return [] as DictionaryEntry[];
+
+  return [...entries]
+    .filter((entry) => {
+      const sourceKey = normalizeSearchValue(entry.sourceText);
+      const targetKey = normalizeSearchValue(entry.targetText);
+      return sourceKey.startsWith(normalizedValue) || targetKey.startsWith(normalizedValue) || sourceKey.includes(normalizedValue) || targetKey.includes(normalizedValue);
+    })
+    .sort((a, b) => {
+      const aSource = normalizeSearchValue(a.sourceText);
+      const aTarget = normalizeSearchValue(a.targetText);
+      const bSource = normalizeSearchValue(b.sourceText);
+      const bTarget = normalizeSearchValue(b.targetText);
+      const aScore = (aSource.startsWith(normalizedValue) ? 4 : 0) + (aTarget.startsWith(normalizedValue) ? 4 : 0) + (aSource.includes(normalizedValue) ? 2 : 0) + (aTarget.includes(normalizedValue) ? 2 : 0) + (a.starred ? 1 : 0);
+      const bScore = (bSource.startsWith(normalizedValue) ? 4 : 0) + (bTarget.startsWith(normalizedValue) ? 4 : 0) + (bSource.includes(normalizedValue) ? 2 : 0) + (bTarget.includes(normalizedValue) ? 2 : 0) + (b.starred ? 1 : 0);
+      if (bScore !== aScore) return bScore - aScore;
+      return a.sourceText.localeCompare(b.sourceText, ["en", "zh-Hans"], { sensitivity: "base" });
+    })
+    .slice(0, 6);
+};
+
 export function App() {
   const [entries, setEntries] = useState<DictionaryEntry[]>([]);
   const [query, setQuery] = useState("");
+  const [sortMode, setSortMode] = useState<SortMode>("time-desc");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [detailCache, setDetailCache] = useState<Record<string, LookupResult>>({});
   const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
@@ -91,6 +173,7 @@ export function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [addText, setAddText] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [preview, setPreview] = useState<PreviewItem | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [manualMode, setManualMode] = useState(false);
@@ -149,8 +232,27 @@ export function App() {
   };
 
   const visibleEntries = useMemo(() => {
-    return sortEntries(entries.filter((entry) => entryMatches(entry, query)), "updatedAt");
-  }, [entries, query]);
+    const filtered = entries.filter((entry) => entryMatches(entry, query));
+    if (sortMode === "time-desc") {
+      return [...filtered].sort((a, b) => {
+        if (a.starred !== b.starred) return Number(b.starred) - Number(a.starred);
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+    }
+
+    return [...filtered].sort((a, b) => {
+      if (a.starred !== b.starred) return Number(b.starred) - Number(a.starred);
+      const result = a.sourceText.localeCompare(b.sourceText, ["en", "zh-Hans"], {
+        sensitivity: "base",
+      });
+      return sortMode === "word-asc" ? result : -result;
+    });
+  }, [entries, query, sortMode]);
+
+  const autocompleteSuggestions = useMemo(() => {
+    if (!addOpen || manualMode || preview) return [] as DictionaryEntry[];
+    return getAutocompleteSuggestions(entries, addText);
+  }, [addOpen, addText, entries, manualMode, preview]);
 
   useEffect(() => {
     if (!expandedId) return;
@@ -189,6 +291,7 @@ export function App() {
     setAddOpen(true);
     setManualMode(false);
     setPreview(null);
+    setShowSuggestions(true);
     setStatus("");
     setTimeout(() => addInputRef.current?.focus(), 0);
   };
@@ -203,6 +306,7 @@ export function App() {
 
   const startManual = () => {
     setManualMode(true);
+    setShowSuggestions(false);
     setEditForm((current) => ({ ...current, sourceText: addText }));
   };
 
@@ -213,6 +317,7 @@ export function App() {
     setManualMode(false);
     setEditingId(null);
     setEditForm(emptyEditForm);
+    setShowSuggestions(false);
   };
 
   const runLookup = async (overrideWord?: string) => {
@@ -220,6 +325,7 @@ export function App() {
     if (!word) return;
     setPreviewLoading(true);
     setPreview(null);
+    setShowSuggestions(false);
     setStatus("");
     try {
       const exactEntry = findExactEntry(entries, word);
@@ -252,6 +358,7 @@ export function App() {
         synonyms: preview.synonyms,
         antonyms: preview.antonyms,
         category: "",
+        starred: false,
       });
       setEntries((current) => [entry, ...current]);
       setStatus(`已保存「${sourceText}」。`);
@@ -296,6 +403,7 @@ export function App() {
       synonyms: splitList(editForm.synonyms),
       antonyms: splitList(editForm.antonyms),
       category: "" as Category,
+      starred: editingId ? entries.find((item) => item.id === editingId)?.starred ?? false : false,
     };
     try {
       if (editingId) {
@@ -357,6 +465,21 @@ export function App() {
       setStatus("复制失败。");
     }
   };
+
+  const toggleStar = async (entry: DictionaryEntry) => {
+    try {
+      const updated = await updateEntry(entry.id, { ...entry, starred: !entry.starred, archived: entry.archived });
+      setEntries((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setDetailCache((current) => {
+        const next = { ...current };
+        delete next[entry.id];
+        return next;
+      });
+      setStatus(updated.starred ? "已加入常用。" : "已取消常用。");
+    } catch {
+      setStatus("常用标记失败。");
+    }
+  };
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -392,6 +515,14 @@ export function App() {
           ) : null}
         </label>
 
+        <label className="sort-field">
+          <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
+            <option value="time-desc">输入时间 · 新到旧</option>
+            <option value="word-asc">单词 · 升序</option>
+            <option value="word-desc">单词 · 降序</option>
+          </select>
+        </label>
+
         <button className="btn btn-primary" onClick={openAdd} type="button">
           <Plus size={16} />
           <span>添加</span>
@@ -401,32 +532,62 @@ export function App() {
       {addOpen && (
         <section className="add-bar">
           {!preview && !manualMode && (
-            <div className="add-input-row">
-              <input
-                ref={addInputRef}
-                className="add-input"
-                value={addText}
-                onChange={(event) => setAddText(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") void runLookup();
-                }}
-                placeholder="输入英文或中文单词，回车自动翻译…"
-              />
-              <button
-                className="btn btn-secondary"
-                onClick={() => void runLookup()}
-                type="button"
-                disabled={previewLoading}
-              >
-                <Sparkles size={15} />
-                <span>{previewLoading ? "翻译中…" : "AI 翻译"}</span>
-              </button>
-              <button className="manual-link" onClick={startManual} type="button">
-                手动填写
-              </button>
-              <button className="icon-btn" onClick={resetAdd} type="button" title="关闭">
-                <X size={16} />
-              </button>
+            <div className="add-input-wrap">
+              <div className="add-input-row">
+                <input
+                  ref={addInputRef}
+                  className="add-input"
+                  value={addText}
+                  onFocus={() => setShowSuggestions(true)}
+                  onBlur={() => {
+                    window.setTimeout(() => setShowSuggestions(false), 120);
+                  }}
+                  onChange={(event) => {
+                    setAddText(event.target.value);
+                    setShowSuggestions(true);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void runLookup();
+                  }}
+                  placeholder="输入英文或中文单词，回车自动翻译…"
+                />
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => void runLookup()}
+                  type="button"
+                  disabled={previewLoading}
+                >
+                  <Sparkles size={15} />
+                  <span>{previewLoading ? "翻译中…" : "AI 翻译"}</span>
+                </button>
+                <button className="manual-link" onClick={startManual} type="button">
+                  手动填写
+                </button>
+                <button className="icon-btn" onClick={resetAdd} type="button" title="关闭">
+                  <X size={16} />
+                </button>
+              </div>
+
+              {showSuggestions && autocompleteSuggestions.length > 0 && (
+                <div className="autocomplete-panel">
+                  {autocompleteSuggestions.map((item) => (
+                    <button
+                      key={item.id}
+                      className="autocomplete-item"
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        setAddText(item.sourceText);
+                        setShowSuggestions(false);
+                        void runLookup(item.sourceText);
+                      }}
+                    >
+                      <span className="autocomplete-source">{item.sourceText}</span>
+                      <span className="autocomplete-target">{item.targetText}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -616,12 +777,21 @@ export function App() {
                   onClick={() => setExpandedId(expanded ? null : entry.id)}
                 >
                   <span className="row-word" title={entry.sourceText}>
-                    {entry.sourceText}
+                    {entry.starred ? <Star size={12} className="row-star" aria-hidden="true" /> : null}
+                    {highlightText(entry.sourceText, query)}
                   </span>
                   <span className="row-trans" title={entry.targetText}>
-                    {entry.targetText}
+                    {highlightText(entry.targetText, query)}
                   </span>
                   <span className="row-actions" onClick={(event) => event.stopPropagation()}>
+                    <button
+                      className="icon-btn"
+                      type="button"
+                      title={entry.starred ? "取消常用" : "设为常用"}
+                      onClick={() => void toggleStar(entry)}
+                    >
+                      <Star size={14} fill={entry.starred ? "currentColor" : "none"} />
+                    </button>
                     <button
                       className="icon-btn"
                       type="button"
@@ -680,7 +850,7 @@ export function App() {
                                 setExpandedId(null);
                               }}
                             >
-                              {item}
+                              {highlightText(item, query)}
                             </button>
                           ))}
                         </div>
@@ -690,7 +860,7 @@ export function App() {
                           <span className="syn-label">反义</span>
                           {antonyms.map((item) => (
                             <span key={item} className="syn-chip antonym">
-                              {item}
+                              {highlightText(item, query)}
                             </span>
                           ))}
                         </div>
