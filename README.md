@@ -1,6 +1,6 @@
 # Local Dictionary App
 
-A small local dictionary app for managing English-to-Chinese and Chinese-to-English words or short phrases while reading on a MacBook. Data is stored in a local SQLite database via a built-in Node.js API server. Also deployable to Vercel with Turso (edge SQLite).
+A small dictionary app for managing English-to-Chinese and Chinese-to-English words or short phrases while reading on a MacBook. The API server uses local SQLite by default, but this workspace's `.env.local` is configured for Turso, so the running service will connect to the remote database unless those vars are removed. The app is also deployable to Vercel with Turso (edge SQLite).
 
 ## Features
 
@@ -10,10 +10,11 @@ A small local dictionary app for managing English-to-Chinese and Chinese-to-Engl
 - Sort by recent update, creation time, source text, or translation
 - Archive and restore entries
 - Delete entries with confirmation
-- Automatically seed `abbrs.md` vocabulary into SQLite on first run
+- Automatically seed `abbrs.md` vocabulary into the database on first run
 - Re-import the bundled `abbrs.md` vocabulary from inside the app if needed
+- Strip markdown bold markers (`**`) while importing glossary rows so stored terms stay clean
 - Export and import dictionary data as JSON
-- Persist data in a local SQLite database (`data/dictionary.sqlite`)
+- Persist data in local SQLite (`data/dictionary.sqlite`) when Turso env vars are not set; otherwise use the configured Turso database
 
 ## Tech Stack
 
@@ -57,7 +58,9 @@ In production, the API server (`server/index.mjs`) serves the built `dist/` fold
 
 ## Data
 
-Dictionary entries are stored in a local SQLite database at `data/dictionary.sqlite` (auto-created on first run). The included `abbrs.md` vocabulary is seeded automatically into the database on first server start.
+Dictionary entries are stored in local SQLite at `data/dictionary.sqlite` when Turso is not configured. If `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are present, the server uses Turso instead and will not create a local `dictionary.sqlite` file. The included `abbrs.md` vocabulary is seeded automatically into the active database on first server start.
+
+The glossary importer strips markdown bold markers from table cells and bullet entries before saving, so words like `**cosine similarity**` are stored and displayed as `cosine similarity`.
 
 Use the app's JSON export feature for portable backups.
 
@@ -69,13 +72,13 @@ The app uses `@libsql/client` which can connect to either a local file or a remo
 
 | Option | Storage | Persistence | Setup Effort | Best For |
 |---|---|---|---|---|
-| **Local SQLite** (default) | `data/dictionary.sqlite` on disk | ✅ Filesystem | Zero — auto-created | Local dev, personal use |
+| **Local SQLite** (fallback) | `data/dictionary.sqlite` on disk | ✅ Filesystem | Zero — auto-created | Local dev when Turso is not configured |
 | **Turso (edge SQLite)** | Turso distributed DB | ✅ Cloud-persisted | Sign up + set 2 env vars | **Vercel / serverless deployment** |
 | **Neon Postgres** | Serverless Postgres | ✅ Cloud-persisted | Schema migration + rewrite queries | If you prefer Postgres |
 
-### Local SQLite (default — no config needed)
+### Local SQLite (fallback — no config needed)
 
-The server auto-creates `data/dictionary.sqlite` using the `file:` protocol of `@libsql/client`. No environment variables needed.
+The server auto-creates `data/dictionary.sqlite` using the `file:` protocol of `@libsql/client` when `TURSO_DATABASE_URL` is not set. No additional environment variables are needed for local SQLite.
 
 ```bash
 node server/index.mjs

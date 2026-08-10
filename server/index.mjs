@@ -262,6 +262,15 @@ async function mergeEntriesByTextPair(entries) {
   return added;
 }
 
+async function replaceAbbrEntries(entries) {
+  await db.execute({
+    sql: "DELETE FROM entries WHERE tags LIKE ?",
+    args: ["%\"abbrs\"%"],
+  });
+
+  return mergeEntriesByTextPair(entries);
+}
+
 async function mergeEntriesById(entries) {
   let added = 0;
 
@@ -366,6 +375,8 @@ function parseMarkdownDictionary(markdown) {
   const entries = [];
   let category = "general";
 
+  const cleanText = (value) => String(value).replace(/\*\*/g, "").trim();
+
   for (const line of markdown.split("\n")) {
     const trimmed = line.trim();
 
@@ -384,7 +395,7 @@ function parseMarkdownDictionary(markdown) {
     const cells = trimmed
       .slice(1, -1)
       .split("|")
-      .map((cell) => cell.trim().replace(/\*\*/g, ""));
+      .map((cell) => cleanText(cell));
 
     if (cells.length < 2) continue;
 
@@ -515,7 +526,7 @@ async function handleApi(request, response, url) {
   if (method === "POST" && url.pathname === "/api/import/abbrs") {
     const rootDir = resolve(new URL("..", import.meta.url).pathname);
     const incoming = parseMarkdownDictionary(readFileSync(resolve(rootDir, "abbrs.md"), "utf8"));
-    const added = await mergeEntriesByTextPair(incoming);
+    const added = await replaceAbbrEntries(incoming);
     sendJson(response, 200, { added, entries: await listEntries() });
     return;
   }

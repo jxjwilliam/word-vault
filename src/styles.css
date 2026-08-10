@@ -39,7 +39,21 @@ body {
 
 /* ---- top bar ---- */
 .topbar { display: flex; align-items: center; gap: 12px; padding: 4px 0 16px; }
-.brand { margin-right: 4px; flex-shrink: 0; }
+.brand {
+  margin-right: 4px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
+}
+.brand-copy { display: flex; flex-direction: column; }
 .brand .eyebrow {
   margin: 0 0 1px; font-size: 10px; font-weight: 600;
   letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-muted);
@@ -60,6 +74,14 @@ body {
   font-size: 14px; color: var(--text); font-family: inherit;
 }
 .search-field input::placeholder { color: var(--text-faint); }
+.search-clear {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border: 0; border-radius: 999px; background: #e5e7eb;
+  color: var(--text-muted); cursor: pointer; flex-shrink: 0; padding: 0;
+  transition: background-color 0.12s ease, color 0.12s ease, transform 0.12s ease;
+}
+.search-clear:hover { background: #dbeafe; color: var(--primary); }
+.search-clear:active { transform: translateY(1px); }
 
 .select-field { flex-shrink: 0; }
 .select-field select {

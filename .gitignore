@@ -25,6 +25,9 @@ pnpm-debug.log*
 .DS_Store
 .idea/
 .vscode/
+.omo/
+.codegraph/
+.playwright-cli/
 
 # TypeScript
 *.tsbuildinfo
@@ -35,3 +38,4 @@ pnpm-debug.log*
 # SQLite database (auto-created on first run)
 data/
 .vercel
+.env*

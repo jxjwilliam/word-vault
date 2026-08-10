@@ -629,7 +629,9 @@ git commit -m "feat: expand seed glossary into categorized sections (TermVault)"
 - Consumes: nothing (pure CSS).
 - Produces: every class name used by the new `App.tsx` (Task 6), listed below. Do not rename classes without updating Task 6.
 
-- [ ] **Step 1: Replace `src/styles.css` with the following**
+- [x] **Step 1: Replace `src/styles.css` with the following**
+
+**Amendment (2026-08-09):** implemented as a design pass over the baseline block below — same class contract (verified against App.tsx), token-based palette, refined chips/buttons/table, `:focus-visible` a11y, plus a `@media (max-width: 560px)` narrow layout for the Chrome extension side panel. Commit `0e31849`.
 
 ```css
 /* TermVault — compact single-line vocabulary table */
@@ -774,11 +776,11 @@ body {
 }
 ```
 
-- [ ] **Step 2: Verify build**
+- [x] **Step 2: Verify build**
 
 Run: `npm run build` — expect exit 0.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/styles.css
@@ -795,6 +797,8 @@ git commit -m "style: rewrite styles.css for compact single-line table (TermVaul
 **Interfaces:**
 - Consumes: `categoryLabels`, `categoryOf`, `detectDirection`, `entryMatches`, `sortEntries` from `src/dictionary.ts`; `createEntry`, `deleteEntryById`, `fetchEntries`, `lookupWord`, `updateEntry` from `src/api.ts`; types `Category`, `CategoryFilter`, `DictionaryEntry`, `LookupResult` from `src/types.ts`; all CSS class names from Task 5.
 - Produces: the complete new UI. No exports change.
+
+**Amendment (2026-08-09):** search empty-state auto-add flow — when the filter yields 0 results and `query` is non-empty, the empty state shows 「X」不在词库中 + 自动添加（AI 翻译） button that opens the add panel pre-filled with the query and auto-runs the LLM lookup (`addFromSearch` in Step 1; `runLookup` gained an optional `overrideWord` param). On LLM failure it falls back to the existing 手动填写 form. No API/type/CSS changes (reuses `btn btn-primary` + imported `Sparkles`). Verified in Step 4 item 10.
 
 - [ ] **Step 1: Replace `src/App.tsx` — Part 1 (imports, state, handlers)**
 
@@ -925,6 +929,14 @@ export function App() {
     setTimeout(() => addInputRef.current?.focus(), 0);
   };
 
+  const addFromSearch = () => {
+    const word = query.trim();
+    if (!word) return;
+    setAddText(word);
+    openAdd();
+    void runLookup(word);
+  };
+
   const startManual = () => {
     setManualMode(true);
     setEditForm((current) => ({ ...current, sourceText: addText }));
@@ -939,8 +951,8 @@ export function App() {
     setEditForm(emptyEditForm);
   };
 
-  const runLookup = async () => {
-    const word = addText.trim();
+  const runLookup = async (overrideWord?: string) => {
+    const word = (overrideWord ?? addText).trim();
     if (!word) return;
     setPreviewLoading(true);
     setPreview(null);
@@ -1293,8 +1305,20 @@ export function App() {
           </div>
         ) : visibleEntries.length === 0 ? (
           <div className="empty-state">
-            <p>没有匹配词条。</p>
-            <span>点击右上角「添加」，输入一个词即可自动翻译建库。</span>
+            {query.trim() ? (
+              <>
+                <p>「{query.trim()}」不在词库中。</p>
+                <button className="btn btn-primary" type="button" onClick={addFromSearch}>
+                  <Sparkles size={15} />
+                  <span>自动添加（AI 翻译）</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <p>没有匹配词条。</p>
+                <span>点击右上角「添加」，输入一个词即可自动翻译建库。</span>
+              </>
+            )}
           </div>
         ) : (
           visibleEntries.map((entry) => {
@@ -1411,6 +1435,7 @@ Open http://127.0.0.1:5173 and check:
 7. With `LLM_API_KEY` unset: 「添加」→ type `agent` → 翻译 shows error message → 手动填写 form appears → fill 译文 → 保存 succeeds (fallback works)
 8. Edit flow: pencil on a row → change 译文 → 「AI 重译」refills translation/synonyms/antonyms → 保存修改
 9. Extension prefill: with `npm run ext` build loaded in Chrome, right-click a selection → 「添加到术语库」 → side panel opens with the add bar open and the selected text prefilled, ready for Enter → AI 翻译
+10. Search a word not in the lib (e.g. `correlate`) → empty state shows 「correlate」不在词库中 + 自动添加（AI 翻译） button → click → add panel opens prefilled with `correlate` and the AI preview appears → 保存 → new row on top. With `LLM_API_KEY` unset the same flow falls back to 手动填写.
 
 - [ ] **Step 5: Commit**
 
@@ -1428,11 +1453,11 @@ git commit -m "feat: rewrite UI as compact single-line table with LLM add flow (
 - Modify: `public/background.js`
 - Modify: `vercel.json`
 - Create: `.env.example`
-- Modify: `AGENTS.md`, `../README.md` (repo root)
+- Modify: `AGENTS.md`, `docs/README.md` (spec, moved into repo on 2026-08-09)
 
 **Interfaces:**
 - Consumes: nothing new.
-- Produces: extension renamed to TermVault with updated context-menu label; Vercel function `maxDuration: 30`; LLM env vars documented; route table updated; root README reflects retirement of translate-plugin.
+- Produces: extension renamed to TermVault with updated context-menu label; Vercel function `maxDuration: 30`; LLM env vars documented; route table updated; spec README (`docs/README.md`) reflects retirement of translate-plugin.
 
 - [ ] **Step 1: Rename the extension in `public/manifest.json`**
 
@@ -1494,8 +1519,12 @@ LLM_MODEL=deepseek-chat
 In `AGENTS.md`:
 - Add to the API routes table: `| POST | /api/lookup | { word } | { translation, synonyms, antonyms, direction } |`
 - In "Key facts", add: `LLM 自动翻译走 OpenAI 兼容接口：LLM_API_KEY (必填), LLM_BASE_URL (默认 https://api.deepseek.com/v1), LLM_MODEL (默认 deepseek-chat)`
+- Update the Direction fact: `**Direction** is "en-to-zh" or "zh-to-en" (SQLite CHECK constraint)` → `**Direction** is "en-to-zh" or "zh-to-en" (SQLite CHECK constraint); the lookup route guesses it from the word's script` (entries are always saved with a concrete direction — `auto` is never stored)
+- Update the source-files table row for App.tsx: `All UI state and rendering — single 493-line component` → `All UI state and rendering — main component (~700 lines, multi-column glossary/search layout)`
+- Update the extension badge line: `The "扩展" badge appears in the topbar when running in extension context` → `The side panel auto-fills the query from the context menu (get-prefill / clear-prefill messages); the topbar shows no special badge`
+- Update the right-click label mention: `"添加 "%s" 到生词库"` → `"添加 "%s" 到术语库"` (context-menu label was renamed in this task)
 
-In `../README.md` (repo root): replace the `## TODO` section with:
+In `docs/README.md`: replace the `## TODO` section with:
 
 ```markdown
 ## Status
@@ -1514,9 +1543,12 @@ Sanity check: `grep -r "TermVault" dist/manifest.json` shows the new name.
 
 - [ ] **Step 7: Commit**
 
+Note: `docs/README.md` is **inside** the repo (moved from the parent folder on 2026-08-09) — stage it with the other files below. `.gitignore` carries a user modification that appends `.env*` at line 38, which overrides the file's own `!.env.example` negation (git last-match-wins — verified `git check-ignore -v .env.example` → `.gitignore:38:.env*`). Never stage or modify `.gitignore`; instead force-add the example file. The commit is a `--only` pathspec commit so the pre-staged files (`.codegraph/.gitignore`, `.gitignore`, the plan doc) are NOT swept in — verify afterwards with `git show --stat HEAD` (must list exactly the 6 files):
+
 ```bash
-git add public/manifest.json public/background.js vercel.json .env.example AGENTS.md ../README.md
-git commit -m "chore: rename extension to TermVault, add LLM config and docs (TermVault)"
+git add public/manifest.json public/background.js vercel.json AGENTS.md docs/README.md
+git add -f .env.example
+git commit --only -m "chore: rename extension to TermVault, add LLM config and docs (TermVault)" -- public/manifest.json public/background.js vercel.json .env.example AGENTS.md docs/README.md
 ```
 
 ---

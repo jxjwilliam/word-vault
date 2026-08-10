@@ -13,7 +13,7 @@
  * Usage:
  *   node scripts/import-large-abbrs.mjs [path-to-abbrs.md]
  *
- * Default file: /Users/william.jiang/my-AI/abbrs.md
+ * Default file: repo-root/abbrs.md
  *
  * Environment (from .env):
  *   TURSO_DATABASE_URL   - Turso DB connection URL
@@ -23,6 +23,7 @@
 import { config as loadEnv } from "dotenv";
 import { createClient } from "@libsql/client";
 import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 
 // Env: prefer merged .env.local, fall back to legacy .env
@@ -32,7 +33,7 @@ loadEnv({ path: existsSync(".env.local") ? ".env.local" : ".env", quiet: true })
 // Config
 // ---------------------------------------------------------------------------
 
-const ABBR_FILE = process.argv[2] || "/Users/william.jiang/my-AI/abbrs.md";
+const ABBR_FILE = process.argv[2] || fileURLToPath(new URL("../abbrs.md", import.meta.url));
 const BATCH_SIZE = 50;
 
 // ---------------------------------------------------------------------------
@@ -52,6 +53,10 @@ function makeEntry(sourceText, targetText) {
     createdAt: now,
     updatedAt: now,
   };
+}
+
+function cleanText(value) {
+  return String(value).replace(/\*\*/g, "").trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +86,7 @@ function parseAbbrs(markdown) {
       const cells = line
         .slice(1, -1)
         .split("|")
-        .map((c) => c.trim());
+        .map((c) => cleanText(c));
 
       if (cells.length < 2) continue;
 
@@ -112,8 +117,8 @@ function parseAbbrs(markdown) {
       let chineseStart = splitIdx;
       while (chineseStart > 0 && text[chineseStart - 1] === " ") chineseStart--;
 
-      const sourceText = text.substring(0, chineseStart).trim();
-      const targetText = text.substring(splitIdx).trim();
+      const sourceText = cleanText(text.substring(0, chineseStart));
+      const targetText = cleanText(text.substring(splitIdx));
 
       if (sourceText && targetText) {
         // Sanity check: Chinese text shouldn't appear in source
@@ -192,6 +197,11 @@ async function main() {
   } catch {
     // Index already exists
   }
+
+  await db.execute({
+    sql: "DELETE FROM entries WHERE tags LIKE ?",
+    args: ["%\"abbrs\"%"],
+  });
 
   // ── Parse ──
   console.log(`📖 Reading: ${ABBR_FILE}`);

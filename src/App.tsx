@@ -282,17 +282,35 @@ export function App() {
     <main className="app-shell">
       <header className="topbar">
         <div className="brand">
-          <p className="eyebrow">TermVault</p>
-          <h1>术语库</h1>
+          <img className="brand-mark" src="/logo.svg" alt="" aria-hidden="true" />
+          <div className="brand-copy">
+            <p className="eyebrow">TermVault</p>
+            <h1>术语库</h1>
+          </div>
         </div>
 
         <label className="search-field">
           <Search size={16} aria-hidden="true" />
           <input
+            aria-label="搜索词条"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="搜索单词 / 译文 / 同义词…"
           />
+          {query.trim() ? (
+            <button
+              className="search-clear"
+              type="button"
+              onClick={() => {
+                setQuery("");
+                setExpandedId(null);
+              }}
+              aria-label="清空搜索"
+              title="清空搜索"
+            >
+              <X size={14} aria-hidden="true" />
+            </button>
+          ) : null}
         </label>
 
         <label className="select-field">
