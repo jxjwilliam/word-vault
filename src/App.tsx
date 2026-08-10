@@ -41,17 +41,38 @@ const listToInput = (list: string[]): string => list.join(", ");
 
 const isChineseText = (value: string) => /[\u4e00-\u9fff]/.test(value);
 
+// The LLM sometimes echoes the input word instead of translating it (e.g. brand
+// names like Terraform). Fall back to the first meaning's text in that case —
+// it holds the actual translation in the opposite language.
+const translationFor = (inputText: string, lookup: LookupResult): string => {
+  const trimmedInput = inputText.trim();
+  const translation = lookup.translation.trim();
+  const isEcho =
+    Boolean(translation) && translation.toLowerCase() === trimmedInput.toLowerCase();
+  const sameLanguage =
+    Boolean(translation) &&
+    isChineseText(translation) === isChineseText(trimmedInput);
+
+  if (!translation || isEcho || sameLanguage) {
+    const fallback = lookup.meanings[0]?.text.trim();
+    if (fallback) return fallback;
+  }
+  return translation;
+};
+
 const normalizePreview = (inputText: string, lookup: LookupResult): PreviewItem => {
   const trimmedInput = inputText.trim();
+  const translation = translationFor(inputText, lookup);
   const sourceText = isChineseText(trimmedInput)
-    ? lookup.translation || trimmedInput
+    ? translation || trimmedInput
     : trimmedInput;
   const targetText = isChineseText(trimmedInput)
     ? trimmedInput
-    : lookup.translation;
+    : translation;
 
   return {
     ...lookup,
+    translation,
     sourceText,
     targetText,
     originalText: trimmedInput,
@@ -380,7 +401,7 @@ export function App() {
       const result = await lookupWord(word);
       setEditForm((current) => ({
         ...current,
-        targetText: result.translation,
+        targetText: translationFor(word, result),
         synonyms: listToInput(result.synonyms),
         antonyms: listToInput(result.antonyms),
       }));

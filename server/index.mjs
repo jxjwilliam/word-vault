@@ -335,6 +335,9 @@ async function lookupWord(word) {
             "If the input is English, return the best natural Chinese translation; if the input is Chinese, return the best natural English technical term. " +
             "Never translate literally when a domain term has an established form " +
             "(e.g. RAG → 检索增强生成, embedding → 向量嵌入, backpressure → 背压). " +
+            "For English input, translation must be Chinese text — never echo the English word itself. " +
+            "For proper nouns or brand names without an established Chinese name, keep the English name and add a short Chinese explanation in parentheses " +
+            "(e.g. Terraform → Terraform（基础设施即代码工具）, Kubernetes → Kubernetes（容器编排平台）). " +
             'Respond ONLY with a JSON object: {"translation": string, "meanings": [{"pos": string, "text": string}], "synonyms": string[], "antonyms": string[], "examples": string[]} ' +
             "with at most 3 meanings, 3 synonyms/antonyms, and 2 short examples.",
         },

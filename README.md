@@ -4,16 +4,25 @@ A small dictionary app for managing English-to-Chinese and Chinese-to-English wo
 
 ## Features
 
-- Add and edit dictionary entries
-- Translate/manage English to Chinese or Chinese to English entries
-- Search source text, translation, notes, tags, and direction
-- Sort by recent update, creation time, source text, or translation
-- Archive and restore entries
-- Delete entries with confirmation
-- Automatically seed `abbrs.md` vocabulary into the database on first run
-- Re-import the bundled `abbrs.md` vocabulary from inside the app if needed
-- Strip markdown bold markers (`**`) while importing glossary rows so stored terms stay clean
-- Export and import dictionary data as JSON
+- **One-field add**: type an English or Chinese word → AI 翻译 fills in the translation,
+  synonyms, and antonyms → one-click 保存
+- **Empty-state auto-add**: searching a word that isn't in the dictionary shows
+  「X」不在词库中 + 自动添加（AI 翻译）, which LLM-translates the word and lets you save it
+- **Bilingual-correct LLM translations**: English input always yields Chinese text; brand
+  names keep the English name with a Chinese explanation (e.g. Terraform →
+  Terraform（基础设施即代码工具）). If the model echoes the input instead of translating,
+  the UI falls back to the first meaning's text
+- Strict substring search across source text, translation, notes, tags, synonyms,
+  and antonyms
+- Sort by input time or word (ascending/descending), with starred (常用) entries pinned first
+- Star (常用标记), edit, copy translation, and delete entries
+- Expand a row for more meanings, synonyms, antonyms, and examples from the LLM
+- Autocomplete suggestions while adding (from existing entries)
+- **Whiteboard (白板便签)**: standalone notepad opened from the topbar (own `wb_notes`
+  table + `/api/whiteboard/*` routes; removable)
+- **Chrome Extension** (Manifest V3): side panel + right-click "添加到术语库" / "查询"
+- Auto-seed the bundled `abbrs.md` vocabulary on first server start; markdown bold
+  markers are stripped while importing so stored terms stay clean
 - Persist data in local SQLite (`data/dictionary.sqlite`) when Turso env vars are not set; otherwise use the configured Turso database
 
 ## Tech Stack
@@ -21,6 +30,24 @@ A small dictionary app for managing English-to-Chinese and Chinese-to-English wo
 - **Backend:** Node.js 18+ (`node:http`, `@libsql/client`)
 - **Frontend:** Vite + React 18 + TypeScript
 - **Icons:** lucide-react
+- **LLM translation:** OpenAI-compatible chat API (default DeepSeek) — see below
+
+## LLM Translation
+
+Auto-translation (`POST /api/lookup`) uses an OpenAI-compatible chat API. The prompt is
+domain-aware (AI/programming terms get established Chinese forms, e.g. RAG →
+检索增强生成) and requires English input to produce Chinese text; proper nouns and brand
+names keep the English name with a short Chinese explanation in parentheses
+(e.g. Terraform → Terraform（基础设施即代码工具）).
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `LLM_API_KEY` | — (required) | API key for the LLM provider |
+| `LLM_BASE_URL` | `https://api.deepseek.com/v1` | OpenAI-compatible base URL |
+| `LLM_MODEL` | `deepseek-chat` | Model name |
+
+Without `LLM_API_KEY`, `/api/lookup` returns an explicit error and the UI degrades to
+manual entry — the app remains fully usable as a dictionary.
 
 ## Getting Started
 

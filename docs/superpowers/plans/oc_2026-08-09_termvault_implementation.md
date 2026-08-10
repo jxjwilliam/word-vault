@@ -800,6 +800,21 @@ git commit -m "style: rewrite styles.css for compact single-line table (TermVaul
 
 **Amendment (2026-08-09):** search empty-state auto-add flow — when the filter yields 0 results and `query` is non-empty, the empty state shows 「X」不在词库中 + 自动添加（AI 翻译） button that opens the add panel pre-filled with the query and auto-runs the LLM lookup (`addFromSearch` in Step 1; `runLookup` gained an optional `overrideWord` param). On LLM failure it falls back to the existing 手动填写 form. No API/type/CSS changes (reuses `btn btn-primary` + imported `Sparkles`). Verified in Step 4 item 10.
 
+**Amendment (2026-08-10):**
+
+- **Search reverted to strict substring matching.** The fuzzy subsequence matcher added
+  with 自动补全/高亮 made short queries like "EDD" match unrelated entries (redundancy,
+  reward model, …), hiding the empty-state add flow. `entryMatches` in `src/dictionary.ts`
+  is back to the pre-fuzzy implementation (lowercased `includes` over source/target/note/
+  tags/synonyms/antonyms/direction); `fuzzyMatchText` was removed. Non-existent queries
+  now reliably show 「X」不在词库中 + 自动添加（AI 翻译）.
+- **LLM translation guarantee.** `/api/lookup` prompt now requires Chinese text for
+  English input and instructs proper nouns/brand names to keep the English name with a
+  Chinese explanation in parentheses (Terraform → Terraform（基础设施即代码工具）). The
+  frontend gained `translationFor` in `src/App.tsx`: if `translation` is empty, echoes
+  the input, or stays in the input's language, it falls back to `meanings[0].text`. Used
+  by `normalizePreview` (preview + save) and `retranslate` (AI 重译).
+
 - [ ] **Step 1: Replace `src/App.tsx` — Part 1 (imports, state, handlers)**
 
 ```tsx

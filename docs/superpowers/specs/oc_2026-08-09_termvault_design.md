@@ -202,3 +202,20 @@ Current: 2-column markdown table, ~130 terms, single flat list. New structure �
 - Existing Turso DB keeps `archived`/`tags` columns — harmless legacy, UI ignores them
 - DeepSeek requires a valid key; without `LLM_API_KEY`, `/api/lookup` returns explicit error and UI degrades to manual entry (app still fully usable as a dictionary)
 - translate-plugin repo is retired — no changes there; README at repo root should note the retirement
+
+## 11. Amendment (2026-08-10) — search strictness + translation guarantee
+
+Two behavior decisions were locked in after real-world testing:
+
+1. **Search is strict substring matching** (source text, translation, note, tags,
+   synonyms, antonyms, direction). A brief fuzzy subsequence search was tried and
+   reverted: it made short queries like "EDD" match unrelated entries (redundancy,
+   reward model, …), so the empty-state add flow never appeared. With strict matching,
+   a non-existent query shows 「X」不在词库中 + 自动添加（AI 翻译）, which runs the LLM
+   lookup and offers one-click 保存 (see the plan's Task 6 amendment).
+2. **LLM translation must be bilingual-correct**: the `/api/lookup` prompt requires
+   Chinese text for English input, and proper nouns/brand names keep the English name
+   with a Chinese explanation in parentheses (Terraform → Terraform（基础设施即代码工具）).
+   As a safety net, the frontend `translationFor` helper falls back to `meanings[0].text`
+   whenever the model echoes the input in the same language (used by the preview flow
+   and AI 重译).

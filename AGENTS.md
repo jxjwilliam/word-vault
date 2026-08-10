@@ -76,7 +76,7 @@ A small notepad separate from TermVault: click the notebook icon in the topbar t
 
 | Dir | Purpose |
 |---|---|
-| `src/` | React app — 4 source files + styles.css |
+| `src/` | React app — main sources + styles.css + `whiteboard/` |
 | `server/` | Single-file Node.js HTTP + SQLite API |
 | `api/` | Vercel serverless function entry point |
 | `scripts/` | Dev orchestrator (spawns both processes) |
@@ -90,7 +90,7 @@ A small notepad separate from TermVault: click the notebook icon in the topbar t
 | `src/types.ts` | `DictionaryEntry`, `Direction`, `SortKey`, `ArchiveFilter`, `ExportPayload` |
 | `src/api.ts` | REST client: `fetchEntries`, `createEntry`, `updateEntry`, `patchEntry`, `deleteEntryById`, `importAbbrs`, `importEntries` |
 | `src/dictionary.ts` | Pure functions: `sortEntries`, `entryMatches`, `normalizeTags`, `tagsToInput`, `createExportPayload`, `parseImportPayload` |
-| `src/App.tsx` | All UI state and rendering — main component (~700 lines, multi-column glossary/search layout) |
+| `src/App.tsx` | All UI state and rendering — main component (~940 lines, compact single-line table + add/preview flow + whiteboard overlay) |
 | `src/styles.css` | All styles (no CSS framework) |
 | `server/index.mjs` | Full API server — CRUD routes, SQLite schema, seed logic, static file serving; also exports handler for Vercel |
 | `server/whiteboard.mjs` | Whiteboard module — `wb_notes` schema + `/api/whiteboard/*` routes (standalone, removable) |
@@ -111,7 +111,7 @@ All routes are prefixed with `/api/`:
 | DELETE | `/api/entries/:id` | — | `{ ok: true }` |
 | POST | `/api/import/abbrs` | `{}` | `{ added: N, entries: [...] }` |
 | POST | `/api/import/json` | `{ entries: [...] }` | `{ added: N, entries: [...] }` |
-| POST | `/api/lookup` | `{ word }` | `{ translation, synonyms, antonyms, direction }` |
+| POST | `/api/lookup` | `{ word }` | `{ translation, meanings, synonyms, antonyms, examples, direction }` |
 
 Whiteboard routes (standalone feature):
 
@@ -139,6 +139,8 @@ Whiteboard routes (standalone feature):
 - **Node.js 18+** required (for `@libsql/client`); Vercel function uses Node.js 22
 - **Vite proxies `/api/*`** to port 4174 in dev mode (configured in `vite.config.ts`). In production, the API server serves static `dist/` directly on the API port, no proxy needed.
 - **`data/` is gitignored** — the SQLite database is auto-created and should not be committed.
+- **Search is strict substring matching** over source text, translation, note, tags, synonyms, antonyms, and direction (no fuzzy subsequence matching). A non-existent query shows an empty state with 自动添加（AI 翻译）, which runs the LLM lookup and offers 保存.
+- **LLM translation guarantee**: English input must produce a Chinese `translation` (prompt-enforced); proper nouns/brand names keep the English name with a Chinese explanation in parentheses (Terraform → Terraform（基础设施即代码工具）). The frontend `translationFor` helper falls back to `meanings[0].text` when the model echoes the input in the same language — used by the preview flow and AI 重译.
 - LLM 自动翻译走 OpenAI 兼容接口：LLM_API_KEY (必填), LLM_BASE_URL (默认 https://api.deepseek.com/v1), LLM_MODEL (默认 deepseek-chat)
 
 ## Style conventions
