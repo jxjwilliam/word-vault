@@ -4,6 +4,7 @@ import { createReadStream, existsSync, readFileSync } from "node:fs";
 import { extname, resolve } from "node:path";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
+import { handleWhiteboardApi, initWhiteboardSchema } from "./whiteboard.mjs";
 
 // Env: prefer merged .env.local, fall back to legacy .env
 loadEnv({ path: existsSync(".env.local") ? ".env.local" : ".env", quiet: true });
@@ -31,6 +32,7 @@ async function getDb() {
   }
 
   await initSchema();
+  await initWhiteboardSchema(db);
   await seedDefaultDictionary();
 
   return db;
@@ -572,6 +574,9 @@ async function handleApi(request, response, url) {
     sendJson(response, 200, await lookupWord(word));
     return;
   }
+
+  // Whiteboard (便签) — standalone feature; remove with server/whiteboard.mjs
+  if (await handleWhiteboardApi(db, request, response, url)) return;
 
   sendJson(response, 404, { error: "Not found" });
 }

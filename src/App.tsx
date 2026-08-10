@@ -1,7 +1,9 @@
 import { Fragment, FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Copy, Pencil, Plus, Search, Sparkles, Star, Trash2, X } from "lucide-react";
+import { Check, Copy, NotebookPen, Pencil, Plus, Search, Sparkles, Star, Trash2, X } from "lucide-react";
 import { detectDirection, entryMatches, normalizeSearchValue } from "./dictionary";
 import { createEntry, deleteEntryById, fetchEntries, lookupWord, updateEntry } from "./api";
+// Whiteboard (便签) — standalone feature; remove this import + the two spots marked below
+import { Whiteboard } from "./whiteboard/Whiteboard";
 import type { Category, DictionaryEntry, LookupMeaning, LookupResult } from "./types";
 
 type SortMode = "time-desc" | "word-asc" | "word-desc";
@@ -178,6 +180,8 @@ export function App() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [manualMode, setManualMode] = useState(false);
   const [status, setStatus] = useState("");
+  // Whiteboard: open state (remove with the whiteboard feature)
+  const [whiteboardOpen, setWhiteboardOpen] = useState(false);
   const addInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -527,6 +531,17 @@ export function App() {
           <Plus size={16} />
           <span>添加</span>
         </button>
+
+        {/* Whiteboard: topbar entry (remove with the whiteboard feature) */}
+        <button
+          className="icon-btn topbar-whiteboard"
+          onClick={() => setWhiteboardOpen(true)}
+          type="button"
+          title="白板便签"
+          aria-label="打开白板便签"
+        >
+          <NotebookPen size={18} />
+        </button>
       </header>
 
       {addOpen && (
@@ -593,6 +608,14 @@ export function App() {
 
           {preview && !manualMode && (
             <div className="preview-card">
+              <button
+                className="icon-btn preview-close"
+                onClick={() => setPreview(null)}
+                type="button"
+                title="忽略"
+              >
+                <X size={16} />
+              </button>
               <div className="preview-main">
                 <div className="preview-head">
                   <h3>{preview.sourceText}</h3>
@@ -734,7 +757,8 @@ export function App() {
           )}
         </section>
       )}
-
+      {/* Whiteboard: overlay mount (remove with the whiteboard feature) */}
+      {whiteboardOpen && <Whiteboard onClose={() => setWhiteboardOpen(false)} />}
       <div className="table">
         <div className="table-header">
           <span>单词</span>

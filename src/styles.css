@@ -186,9 +186,11 @@ body {
 .highlight { background: #fde68a; color: inherit; padding: 0 1px; border-radius: 3px; }
 
 .preview-card {
+  position: relative;
   margin-top: 10px; padding: 14px; background: var(--surface-soft);
   border: 1px solid #e2e8f0; border-radius: var(--radius);
 }
+.preview-close { position: absolute; top: 10px; right: 10px; }
 .preview-main { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .preview-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .preview-main h3 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
@@ -308,6 +310,131 @@ body {
 /* ---- keyboard focus ---- */
 :focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; }
+
+/* ============================================================
+   Whiteboard (白板便签) — standalone feature.
+   Remove this whole block along with src/whiteboard/ and the
+   marked lines in App.tsx / server/index.mjs when removing the feature.
+   ============================================================ */
+
+.topbar-whiteboard { width: 34px; height: 34px; border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow-sm); }
+.topbar-whiteboard:hover { border-color: var(--border-strong); }
+
+.wb-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.wb-panel {
+  width: min(620px, 100%);
+  max-height: min(78vh, 640px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+  overflow: hidden;
+}
+
+.wb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.wb-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.wb-title svg { color: var(--primary); }
+
+.wb-body { padding: 14px; overflow-y: auto; }
+
+.wb-add { width: 100%; margin-bottom: 12px; }
+
+.wb-error {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--danger);
+  background: var(--danger-tint);
+  border-radius: var(--radius);
+}
+
+.wb-empty { margin: 24px 0; font-size: 13px; color: var(--text-muted); text-align: center; }
+
+.wb-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wb-item { display: block; }
+
+.wb-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface-soft);
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid var(--primary);
+  border-radius: var(--radius);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.wb-note:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
+
+.wb-move { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+.wb-move .icon-btn { width: 22px; height: 22px; }
+.wb-move .icon-btn:disabled { opacity: 0.3; cursor: default; pointer-events: none; }
+
+.wb-note-main { flex: 1; min-width: 0; }
+.wb-note-title { margin: 0 0 4px; font-size: 14px; font-weight: 600; color: var(--text); }
+.wb-note-content {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.wb-note-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.wb-danger:hover { background: var(--danger-tint); color: var(--danger); }
+
+.wb-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--surface-soft);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+}
+
+.wb-textarea,
+
+.wb-form-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
 /* ---- narrow layout (Chrome extension side panel) ---- */
 @media (max-width: 560px) {

@@ -7,25 +7,6 @@ export const normalizeSearchValue = (value: string) =>
     .normalize("NFKC")
     .replace(/[^0-9a-z\u4e00-\u9fff]+/g, "");
 
-export const fuzzyMatchText = (text: string, query: string) => {
-  const normalizedQuery = normalizeSearchValue(query);
-  if (!normalizedQuery) return true;
-
-  const normalizedText = normalizeSearchValue(text);
-  if (!normalizedText) return false;
-
-  if (normalizedText.includes(normalizedQuery)) return true;
-
-  let textIndex = 0;
-  for (const char of normalizedQuery) {
-    textIndex = normalizedText.indexOf(char, textIndex);
-    if (textIndex === -1) return false;
-    textIndex += 1;
-  }
-
-  return true;
-};
-
 export const normalizeTags = (value: string) =>
   value
     .split(/[，,]/)
@@ -47,18 +28,21 @@ export const sortEntries = (entries: DictionaryEntry[], sortKey: SortKey) => {
 };
 
 export const entryMatches = (entry: DictionaryEntry, query: string) => {
-  return fuzzyMatchText(
-    [
-      entry.sourceText,
-      entry.targetText,
-      entry.note,
-      entry.direction,
-      entry.tags.join(" "),
-      entry.synonyms.join(" "),
-      entry.antonyms.join(" "),
-    ].join(" "),
-    query,
-  );
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return true;
+
+  return [
+    entry.sourceText,
+    entry.targetText,
+    entry.note,
+    entry.direction,
+    entry.tags.join(" "),
+    entry.synonyms.join(" "),
+    entry.antonyms.join(" "),
+  ]
+    .join(" ")
+    .toLowerCase()
+    .includes(normalized);
 };
 
 export const parseImportPayload = (text: string): DictionaryEntry[] => {

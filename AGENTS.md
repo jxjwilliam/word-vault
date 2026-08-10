@@ -56,12 +56,23 @@ Single-page dictionary app (English ↔ Chinese). Persistence via **`@libsql/cli
 ```
 scripts/dev.mjs      # spawns both servers concurrently
 server/index.mjs     # Node.js HTTP API server, serves static dist/
+server/whiteboard.mjs # Whiteboard feature module (standalone, removable)
 api/index.mjs        # Vercel serverless function entry (re-exports server handler)
 src/                 # Vite React frontend
+src/whiteboard/      # Whiteboard feature folder (standalone, removable)
 abbrs.md             # bundled seed vocabulary
 data/dictionary.sqlite # auto-created SQLite DB (local dev)
 vercel.json          # Vercel build config + function routing
 ```
+
+## Whiteboard (白板便签) — standalone feature
+
+A small notepad separate from TermVault: click the notebook icon in the topbar to open it. Notes support add / inline edit / delete / move up-down, rendered as `ul/li` list items.
+
+- **Own table**: `wb_notes` (id, title, content, position, created_at, updated_at) — never touches the `entries` table
+- **Own routes**: `/api/whiteboard/notes` (GET list, POST create) and `/:id` (PUT edit, PATCH move, DELETE)
+- **Own files**: `server/whiteboard.mjs` + `src/whiteboard/` (types.ts, api.ts, Whiteboard.tsx)
+- **To remove entirely**: delete `server/whiteboard.mjs` and `src/whiteboard/`, drop the `wb_notes` table, then remove the marked lines in `server/index.mjs` (import + `initWhiteboardSchema` call + route dispatch), `src/App.tsx` (import, state, topbar icon, overlay mount) and the `Whiteboard` CSS block in `src/styles.css`
 
 | Dir | Purpose |
 |---|---|
@@ -82,6 +93,8 @@ vercel.json          # Vercel build config + function routing
 | `src/App.tsx` | All UI state and rendering — main component (~700 lines, multi-column glossary/search layout) |
 | `src/styles.css` | All styles (no CSS framework) |
 | `server/index.mjs` | Full API server — CRUD routes, SQLite schema, seed logic, static file serving; also exports handler for Vercel |
+| `server/whiteboard.mjs` | Whiteboard module — `wb_notes` schema + `/api/whiteboard/*` routes (standalone, removable) |
+| `src/whiteboard/` | Whiteboard UI — `types.ts`, `api.ts`, `Whiteboard.tsx` (standalone, removable) |
 | `api/index.mjs` | Vercel serverless function entry (re-exports `server/index.mjs` handler) |
 | `vercel.json` | Vercel build config, `/api/*` rewrite rule, Node.js 22 runtime |
 
@@ -99,6 +112,16 @@ All routes are prefixed with `/api/`:
 | POST | `/api/import/abbrs` | `{}` | `{ added: N, entries: [...] }` |
 | POST | `/api/import/json` | `{ entries: [...] }` | `{ added: N, entries: [...] }` |
 | POST | `/api/lookup` | `{ word }` | `{ translation, synonyms, antonyms, direction }` |
+
+Whiteboard routes (standalone feature):
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/api/whiteboard/notes` | — | `{ notes: [...] }` ordered by position |
+| POST | `/api/whiteboard/notes` | `{ title, content }` | `{ note: {...} }` |
+| PUT | `/api/whiteboard/notes/:id` | `{ title, content }` | `{ note: {...} }` |
+| PATCH | `/api/whiteboard/notes/:id` | `{ move: "up" \| "down" }` | `{ note: {...} }` |
+| DELETE | `/api/whiteboard/notes/:id` | — | `{ ok: true }` |
 
 ## Key facts
 
