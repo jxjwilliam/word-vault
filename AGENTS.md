@@ -65,6 +65,22 @@ data/dictionary.sqlite # auto-created SQLite DB (local dev)
 vercel.json          # Vercel build config + function routing
 ```
 
+## Bulk word import
+
+`scripts/import-words.mjs` (alias `npm run words`) reads a plain-text word list (default `abbr-new.txt`) and inserts entries into the Turso DB configured in `.env.local`.
+
+| Line form | Handling |
+|---|---|
+| `forgo, 放弃` | English + Chinese on one line → used as-is, no LLM call |
+| `decomposition` | English only → LLM translates to Chinese (`en-to-zh`) |
+| `分解` | Chinese only → LLM translates to English (`zh-to-en`) |
+| `forgo, distinction` | Comma list of same-language words → split into separate entries |
+
+- Flags: `--dry-run` (translate + preview only), `--verbose` (print the full LLM payload)
+- Dedupes on `source_text` (case-insensitive) — existing rows are skipped, never overwritten
+- Writes core fields only: `source_text`, `target_text`, `direction`, `note`, `tags` (`["abbr-new"]`), timestamps
+- Key resolution: `LLM_API_KEY`, falling back to a `DEEPSEEK_API_KEY` shell env var on 401/403; reuses the `/api/lookup` translation prompt
+
 ## Whiteboard (白板便签) — standalone feature
 
 A small notepad separate from TermVault: click the notebook icon in the topbar to open it. Notes support add / inline edit / delete / move up-down, rendered as `ul/li` list items.
@@ -79,7 +95,7 @@ A small notepad separate from TermVault: click the notebook icon in the topbar t
 | `src/` | React app — main sources + styles.css + `whiteboard/` |
 | `server/` | Single-file Node.js HTTP + SQLite API |
 | `api/` | Vercel serverless function entry point |
-| `scripts/` | Dev orchestrator (spawns both processes) |
+| `scripts/` | Dev orchestrator (spawns both processes); `import-words.mjs` imports a word list into Turso |
 | `dist/` | Build output (gitignored) |
 | `data/` | SQLite database (auto-created, gitignored) |
 

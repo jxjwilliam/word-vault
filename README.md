@@ -57,6 +57,15 @@ manual entry — the app remains fully usable as a dictionary.
 npm install
 ```
 
+### Bulk word import (Turso)
+
+```bash
+npm run words -- --dry-run   # translate + preview, writes nothing
+npm run words                # insert into the database in .env.local (TURSO_DATABASE_URL)
+```
+
+Reads `abbr-new.txt` by default; pass another path as the first argument. Each line is one of: an English↔Chinese pair (`forgo, 放弃` — used as-is), a single English word, or a single Chinese word (translated by the LLM). Comma-separated English words (`forgo, distinction`) become separate entries. Existing `source_text` values are skipped, never overwritten. Entries are tagged `abbr-new`.
+
 ### Development (API + Vite)
 
 ```bash

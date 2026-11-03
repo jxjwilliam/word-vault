@@ -24,4 +24,7 @@
 - LLM translation guarantees Chinese for English input; brand names keep the English
   name with a Chinese explanation (Terraform → Terraform（基础设施即代码工具）).
 - Added standalone whiteboard/notepad (白板便签) — own `wb_notes` table + routes.
+- Added `scripts/import-words.mjs` (`npm run words`) — bulk-import a plain-text word
+  list into Turso, LLM-translating whichever side is missing and skipping words already
+  in the DB.
 - `translate-plugin` retired — its functionality is built into word-vault's extension.
