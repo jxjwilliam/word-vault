@@ -43,11 +43,19 @@ names keep the English name with a short Chinese explanation in parentheses
 | Env var | Default | Purpose |
 |---|---|---|
 | `LLM_API_KEY` | — (required) | API key for the LLM provider |
+| `DEEPSEEK_API_KEY` | — (optional) | Fallback key, tried when `LLM_API_KEY` is rejected (401/403) |
 | `LLM_BASE_URL` | `https://api.deepseek.com/v1` | OpenAI-compatible base URL |
 | `LLM_MODEL` | `deepseek-chat` | Model name |
 
-Without `LLM_API_KEY`, `/api/lookup` returns an explicit error and the UI degrades to
+Without either key, `/api/lookup` returns an explicit error and the UI degrades to
 manual entry — the app remains fully usable as a dictionary.
+
+Each upstream attempt times out after 12s; when no key works the error names the two
+variables instead of a generic failure.
+
+> **Rotating a key:** update `.env.local` *and* the Vercel environment variables
+> (Production **and** Preview), then redeploy — Vercel injects env vars at deploy time,
+> so a new value does not reach an existing deployment.
 
 ## Getting Started
 
@@ -104,7 +112,7 @@ Use the app's JSON export feature for portable backups.
 
 The app uses `@libsql/client` which can connect to either a local file or a remote Turso database. This makes it flexible for different deployment targets.
 
-> **⚠️ Vercel / serverless deployment requires Turso.** Serverless functions have a read-only filesystem — the local `file:` SQLite fallback will fail and your data will not persist. You must set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` environment variables for Vercel to work.
+> **⚠️ Vercel / serverless deployment needs Turso for persistence.** Serverless functions have a read-only filesystem, so when `TURSO_*` is unset the server falls back to `/tmp/dictionary.sqlite` — it runs, but the data is per-instance and disappears on cold start. Set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` for any deployment you care about.
 
 | Option | Storage | Persistence | Setup Effort | Best For |
 |---|---|---|---|---|
@@ -160,11 +168,11 @@ node server/index.mjs
    ```bash
    vercel --prod
    ```
-   Add `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` as environment variables in the Vercel dashboard (or `vercel env add`).
+   Add `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` as environment variables in the Vercel dashboard (or `vercel env add`), plus the LLM key. Env vars are injected at deploy time — redeploy after changing any of them, and set them for both Production and Preview targets.
 
    The `vercel.json` config handles the API routing — build output in `dist/`, API requests handled by `api/index.mjs`.
 
-   **Without Turso env vars, the deployment will fail at runtime** — serverless functions cannot write to the filesystem, so the local SQLite fallback cannot create `data/dictionary.sqlite`.
+   **Without Turso env vars the API still starts (falling back to `/tmp/dictionary.sqlite`) but does not persist** — every cold start begins with a fresh database.
 
 ### Neon Postgres (alternative)
 

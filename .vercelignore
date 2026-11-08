@@ -1,6 +1,9 @@
 .codegraph/
 .playwright-cli/
 .superpowers/
+.vercel/
+.vscode/
+.idea/
 node_modules/
 data/
 dist/
@@ -9,3 +12,5 @@ dist/
 .env.*
 !.env.example
 *.log
+.DS_Store
+*.tsbuildinfo

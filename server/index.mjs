@@ -1,7 +1,7 @@
 import { config as loadEnv } from "dotenv";
 import { createClient } from "@libsql/client";
 import { createReadStream, existsSync, readFileSync } from "node:fs";
-import { extname, resolve } from "node:path";
+import { dirname, extname, resolve } from "node:path";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { handleWhiteboardApi, initWhiteboardSchema } from "./whiteboard.mjs";
@@ -15,6 +15,12 @@ loadEnv({ path: existsSync(".env.local") ? ".env.local" : ".env", quiet: true })
 
 let db;
 
+/** Local SQLite path — serverless bundles only get /tmp as a writable directory. */
+function localDbPath() {
+  const dataDir = process.env.VERCEL ? "/tmp" : resolve(process.cwd(), "data");
+  return process.env.DICTIONARY_DB_PATH || resolve(dataDir, "dictionary.sqlite");
+}
+
 async function getDb() {
   if (db) return db;
 
@@ -25,9 +31,8 @@ async function getDb() {
     });
   } else {
     const { mkdirSync } = await import("node:fs");
-    const dataDir = resolve(process.cwd(), "data");
-    mkdirSync(dataDir, { recursive: true });
-    const dbPath = process.env.DICTIONARY_DB_PATH || resolve(dataDir, "dictionary.sqlite");
+    const dbPath = localDbPath();
+    mkdirSync(dirname(dbPath), { recursive: true });
     db = createClient({ url: `file:${dbPath}` });
   }
 
@@ -305,6 +310,9 @@ async function mergeEntriesById(entries) {
 // LLM lookup (TermVault)
 // ---------------------------------------------------------------------------
 
+/** Per-attempt upstream budget — must stay well under the function's maxDuration. */
+const LLM_TIMEOUT_MS = 12_000;
+
 /** Candidate API keys, in priority order: LLM_API_KEY first, then a DEEPSEEK_API_KEY env var. */
 function llmApiKeys() {
   return [
@@ -319,7 +327,9 @@ function llmApiKeys() {
 async function lookupWord(word) {
   const apiKeys = llmApiKeys();
   if (apiKeys.length === 0) {
-    const error = new Error("LLM_API_KEY not configured — set it in the environment");
+    const error = new Error(
+      "No LLM key configured — set LLM_API_KEY or DEEPSEEK_API_KEY in the environment",
+    );
     error.statusCode = 500;
     throw error;
   }
@@ -330,40 +340,54 @@ async function lookupWord(word) {
 
   // Try each candidate key; a rejected key (401/403) falls through to the next one.
   let response;
-  for (const apiKey of apiKeys) {
-    response = await fetch(`${base}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a technical bilingual dictionary for AI and programming terms. " +
-              "If the input is English, return the best natural Chinese translation; if the input is Chinese, return the best natural English technical term. " +
-              "Never translate literally when a domain term has an established form " +
-              "(e.g. RAG → 检索增强生成, embedding → 向量嵌入, backpressure → 背压). " +
-              "For English input, translation must be Chinese text — never echo the English word itself. " +
-              "For proper nouns or brand names without an established Chinese name, keep the English name and add a short Chinese explanation in parentheses " +
-              "(e.g. Terraform → Terraform（基础设施即代码工具）, Kubernetes → Kubernetes（容器编排平台）). " +
-              'Respond ONLY with a JSON object: {"translation": string, "meanings": [{"pos": string, "text": string}], "synonyms": string[], "antonyms": string[], "examples": string[]} ' +
-              "with at most 3 meanings, 3 synonyms/antonyms, and 2 short examples.",
-          },
-          { role: "user", content: `Translate this term: ${word}` },
-        ],
-      }),
-    });
+  for (const [index, apiKey] of apiKeys.entries()) {
+    try {
+      response = await fetch(`${base}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
+        body: JSON.stringify({
+          model,
+          temperature: 0.2,
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are a technical bilingual dictionary for AI and programming terms. " +
+                "If the input is English, return the best natural Chinese translation; if the input is Chinese, return the best natural English technical term. " +
+                "Never translate literally when a domain term has an established form " +
+                "(e.g. RAG → 检索增强生成, embedding → 向量嵌入, backpressure → 背压). " +
+                "For English input, translation must be Chinese text — never echo the English word itself. " +
+                "For proper nouns or brand names without an established Chinese name, keep the English name and add a short Chinese explanation in parentheses " +
+                "(e.g. Terraform → Terraform（基础设施即代码工具）, Kubernetes → Kubernetes（容器编排平台）). " +
+                'Respond ONLY with a JSON object: {"translation": string, "meanings": [{"pos": string, "text": string}], "synonyms": string[], "antonyms": string[], "examples": string[]} ' +
+                "with at most 3 meanings, 3 synonyms/antonyms, and 2 short examples.",
+            },
+            { role: "user", content: `Translate this term: ${word}` },
+          ],
+        }),
+      });
+    } catch (cause) {
+      const timedOut = cause?.name === "TimeoutError" || cause?.name === "AbortError";
+      const error = new Error(
+        timedOut
+          ? `LLM request timed out after ${LLM_TIMEOUT_MS}ms`
+          : `LLM request failed: ${cause?.message ?? "network error"}`,
+      );
+      error.statusCode = 502;
+      throw error;
+    }
 
     if (response.status !== 401 && response.status !== 403) break;
+    console.warn(`LLM key #${index + 1} rejected (${response.status}), trying next candidate`);
   }
 
   if (!response.ok) {
+    console.error(`LLM lookup failed for "${word}": ${response.status}`);
     const error = new Error(
       response.status === 401 || response.status === 403
         ? `LLM authentication failed (${response.status}) — check LLM_API_KEY / DEEPSEEK_API_KEY`
@@ -689,9 +713,12 @@ if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
 
   server.listen(port, "127.0.0.1", () => {
     getDb().then(() => {
-      const dbPath = process.env.DICTIONARY_DB_PATH || "data/dictionary.sqlite";
       console.log(`Dictionary API ready at http://127.0.0.1:${port}`);
-      console.log(process.env.TURSO_DATABASE_URL ? `Turso database: ${process.env.TURSO_DATABASE_URL}` : `SQLite database: ${dbPath}`);
+      console.log(
+        process.env.TURSO_DATABASE_URL
+          ? `Turso database: ${process.env.TURSO_DATABASE_URL}`
+          : `SQLite database: ${localDbPath()}`,
+      );
     });
   });
 }
