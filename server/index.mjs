@@ -305,9 +305,20 @@ async function mergeEntriesById(entries) {
 // LLM lookup (TermVault)
 // ---------------------------------------------------------------------------
 
+/** Candidate API keys, in priority order: LLM_API_KEY first, then a DEEPSEEK_API_KEY env var. */
+function llmApiKeys() {
+  return [
+    ...new Set(
+      [process.env.LLM_API_KEY, process.env.DEEPSEEK_API_KEY]
+        .map((key) => (key ?? "").trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
 async function lookupWord(word) {
-  const apiKey = process.env.LLM_API_KEY;
-  if (!apiKey) {
+  const apiKeys = llmApiKeys();
+  if (apiKeys.length === 0) {
     const error = new Error("LLM_API_KEY not configured — set it in the environment");
     error.statusCode = 500;
     throw error;
@@ -317,37 +328,47 @@ async function lookupWord(word) {
   const model = process.env.LLM_MODEL || "deepseek-chat";
   const direction = /[\u4e00-\u9fff]/.test(word) ? "zh-to-en" : "en-to-zh";
 
-  const response = await fetch(`${base}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a technical bilingual dictionary for AI and programming terms. " +
-            "If the input is English, return the best natural Chinese translation; if the input is Chinese, return the best natural English technical term. " +
-            "Never translate literally when a domain term has an established form " +
-            "(e.g. RAG → 检索增强生成, embedding → 向量嵌入, backpressure → 背压). " +
-            "For English input, translation must be Chinese text — never echo the English word itself. " +
-            "For proper nouns or brand names without an established Chinese name, keep the English name and add a short Chinese explanation in parentheses " +
-            "(e.g. Terraform → Terraform（基础设施即代码工具）, Kubernetes → Kubernetes（容器编排平台）). " +
-            'Respond ONLY with a JSON object: {"translation": string, "meanings": [{"pos": string, "text": string}], "synonyms": string[], "antonyms": string[], "examples": string[]} ' +
-            "with at most 3 meanings, 3 synonyms/antonyms, and 2 short examples.",
-        },
-        { role: "user", content: `Translate this term: ${word}` },
-      ],
-    }),
-  });
+  // Try each candidate key; a rejected key (401/403) falls through to the next one.
+  let response;
+  for (const apiKey of apiKeys) {
+    response = await fetch(`${base}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a technical bilingual dictionary for AI and programming terms. " +
+              "If the input is English, return the best natural Chinese translation; if the input is Chinese, return the best natural English technical term. " +
+              "Never translate literally when a domain term has an established form " +
+              "(e.g. RAG → 检索增强生成, embedding → 向量嵌入, backpressure → 背压). " +
+              "For English input, translation must be Chinese text — never echo the English word itself. " +
+              "For proper nouns or brand names without an established Chinese name, keep the English name and add a short Chinese explanation in parentheses " +
+              "(e.g. Terraform → Terraform（基础设施即代码工具）, Kubernetes → Kubernetes（容器编排平台）). " +
+              'Respond ONLY with a JSON object: {"translation": string, "meanings": [{"pos": string, "text": string}], "synonyms": string[], "antonyms": string[], "examples": string[]} ' +
+              "with at most 3 meanings, 3 synonyms/antonyms, and 2 short examples.",
+          },
+          { role: "user", content: `Translate this term: ${word}` },
+        ],
+      }),
+    });
+
+    if (response.status !== 401 && response.status !== 403) break;
+  }
 
   if (!response.ok) {
-    const error = new Error(`LLM request failed: ${response.status}`);
+    const error = new Error(
+      response.status === 401 || response.status === 403
+        ? `LLM authentication failed (${response.status}) — check LLM_API_KEY / DEEPSEEK_API_KEY`
+        : `LLM request failed: ${response.status}`,
+    );
     error.statusCode = 502;
     throw error;
   }

@@ -1,0 +1,11 @@
+.codegraph/
+.playwright-cli/
+.superpowers/
+node_modules/
+data/
+dist/
+.git/
+.env
+.env.*
+!.env.example
+*.log
