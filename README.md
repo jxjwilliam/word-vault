@@ -16,6 +16,9 @@ A small dictionary app for managing English-to-Chinese and Chinese-to-English wo
   and antonyms
 - Sort by input time or word (ascending/descending), with starred (常用) entries pinned first
 - Star (常用标记), edit, copy translation, and delete entries
+- **Pronunciation (朗读)**: a speaker icon on every row reads the English side aloud via the
+  browser's built-in Web Speech API — left column for en→zh entries, the translation for
+  zh→en ones. No API key, no network, no dependencies
 - Expand a row for more meanings, synonyms, antonyms, and examples from the LLM
 - Autocomplete suggestions while adding (from existing entries)
 - **Whiteboard (白板便签)**: standalone notepad opened from the topbar (own `wb_notes`

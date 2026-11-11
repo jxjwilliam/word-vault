@@ -1,5 +1,5 @@
 import { Fragment, FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Copy, NotebookPen, Pencil, Plus, Search, Sparkles, Star, Trash2, X } from "lucide-react";
+import { Check, Copy, NotebookPen, Pencil, Plus, Search, Sparkles, Star, Trash2, Volume2, X } from "lucide-react";
 import { detectDirection, entryMatches, normalizeSearchValue } from "./dictionary";
 import { createEntry, deleteEntryById, fetchEntries, lookupWord, updateEntry } from "./api";
 // Whiteboard (便签) — standalone feature; remove this import + the two spots marked below
@@ -40,6 +40,23 @@ const splitList = (value: string): string[] =>
 const listToInput = (list: string[]): string => list.join(", ");
 
 const isChineseText = (value: string) => /[\u4e00-\u9fff]/.test(value);
+
+// The speaker should always read the English side of a row: the left column for
+// en→zh entries, the translation for zh→en entries.
+const englishTextFor = (entry: DictionaryEntry) => {
+  if (!isChineseText(entry.sourceText)) return entry.sourceText;
+  if (!isChineseText(entry.targetText)) return entry.targetText;
+  return entry.sourceText;
+};
+
+const pickEnglishVoice = (synth: SpeechSynthesis) => {
+  const voices = synth.getVoices();
+  return (
+    voices.find((voice) => voice.lang.replace("_", "-") === "en-US") ??
+    voices.find((voice) => voice.lang.replace("_", "-").toLowerCase().startsWith("en")) ??
+    null
+  );
+};
 
 // The LLM sometimes echoes the input word instead of translating it (e.g. brand
 // names like Terraform). Fall back to the first meaning's text in that case —
@@ -482,6 +499,25 @@ export function App() {
     }
   };
 
+  const speakWord = (entry: DictionaryEntry) => {
+    const synth = window.speechSynthesis;
+    if (!synth) {
+      setStatus("当前浏览器不支持朗读。");
+      return;
+    }
+
+    const text = englishTextFor(entry);
+    if (!text) return;
+
+    synth.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-US";
+    utterance.rate = 0.9;
+    const voice = pickEnglishVoice(synth);
+    if (voice) utterance.voice = voice;
+    synth.speak(utterance);
+  };
+
   const copyTranslation = async (entry: DictionaryEntry) => {
     try {
       await navigator.clipboard.writeText(entry.targetText);
@@ -829,6 +865,15 @@ export function App() {
                     {highlightText(entry.targetText, query)}
                   </span>
                   <span className="row-actions" onClick={(event) => event.stopPropagation()}>
+                    <button
+                      className="icon-btn"
+                      type="button"
+                      title="朗读发音"
+                      aria-label={`朗读 ${englishTextFor(entry)}`}
+                      onClick={() => speakWord(entry)}
+                    >
+                      <Volume2 size={14} />
+                    </button>
                     <button
                       className="icon-btn"
                       type="button"

@@ -265,7 +265,7 @@ body {
   text-transform: uppercase; letter-spacing: 0.06em; user-select: none;
   background: #fafafa; border-bottom: 1px solid var(--border);
 }
-.tbl-row { position: relative; min-height: 38px; border-bottom: 1px solid #f1f2f4; cursor: pointer; transition: background-color 0.12s ease; padding-right: 106px; }
+.tbl-row { position: relative; min-height: 38px; border-bottom: 1px solid #f1f2f4; cursor: pointer; transition: background-color 0.12s ease; padding-right: 132px; }
 .tbl-row:last-child { border-bottom: 0; }
 .tbl-row:hover { background: var(--surface-soft); }
 .tbl-row.selected { background: var(--primary-soft); box-shadow: inset 2px 0 0 var(--primary); }
