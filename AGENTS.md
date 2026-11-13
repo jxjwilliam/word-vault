@@ -81,6 +81,17 @@ vercel.json          # Vercel build config + function routing
 - Writes core fields only: `source_text`, `target_text`, `direction`, `note`, `tags` (`["abbr-new"]`), timestamps
 - Key resolution: `LLM_API_KEY`, falling back to a `DEEPSEEK_API_KEY` shell env var on 401/403; reuses the `/api/lookup` translation prompt
 
+## Print export
+
+`scripts/export-words.mjs` (alias `npm run export`) dumps TermVault to a plain-text file for printing.
+
+- **Fixed output**: `data/termvault.txt` (gitignored, auto-created). Override with `--out <path>`
+- **Always a full regenerate**: the file is written to a temp file then renamed over the target, so repeated runs never append and never duplicate
+- **Source**: Turso when `TURSO_DATABASE_URL` is set in `.env.local`, else the local `data/dictionary.sqlite`
+- **Format**: alphabetically sorted (`localeCompare` en + zh-Hans), one entry per line as `source — target`, with a header showing time + count
+- Flags: `--all` (include archived), `--starred` (only starred), `--group` (A–Z / # / 其他 section headers), `--notes` (note on a second line)
+- Dedupes on the lowercased `(source, target)` pair and reports skipped archived / duplicate / non-starred counts
+
 ## Whiteboard (白板便签) — standalone feature
 
 A small notepad separate from TermVault: click the notebook icon in the topbar to open it. Notes support add / inline edit / delete / move up-down, rendered as `ul/li` list items.
@@ -95,7 +106,7 @@ A small notepad separate from TermVault: click the notebook icon in the topbar t
 | `src/` | React app — main sources + styles.css + `whiteboard/` |
 | `server/` | Single-file Node.js HTTP + SQLite API |
 | `api/` | Vercel serverless function entry point |
-| `scripts/` | Dev orchestrator (spawns both processes); `import-words.mjs` imports a word list into Turso |
+| `scripts/` | Dev orchestrator (spawns both processes); `import-words.mjs` imports a word list into Turso; `export-words.mjs` exports entries to a printable txt |
 | `dist/` | Build output (gitignored) |
 | `data/` | SQLite database (auto-created, gitignored) |
 

@@ -9,6 +9,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "icons": "node scripts/generate-icons.mjs",
     "words": "node scripts/import-words.mjs",
+    "export": "node scripts/export-words.mjs",
     "ext": "npm run icons && npm run build",
     "ext:dev": "npm run icons && vite build --mode development"
   },
