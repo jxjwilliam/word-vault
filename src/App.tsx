@@ -41,19 +41,96 @@ const listToInput = (list: string[]): string => list.join(", ");
 
 const isChineseText = (value: string) => /[\u4e00-\u9fff]/.test(value);
 
+// zh→en rows can keep a Chinese gloss beside the English term
+// ("Terraform（基础设施即代码工具）"). An en-US voice mangles CJK text, so read
+// only the Latin part — and keep the original when nothing Latin is left.
+const spokenTextFor = (text: string) => {
+  const cleaned = text
+    .replace(/[（(][^）)]*[）)]/g, " ")
+    .replace(/[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return /[A-Za-z]/.test(cleaned) ? cleaned : text.trim();
+};
+
 // The speaker should always read the English side of a row: the left column for
 // en→zh entries, the translation for zh→en entries.
 const englishTextFor = (entry: DictionaryEntry) => {
-  if (!isChineseText(entry.sourceText)) return entry.sourceText;
-  if (!isChineseText(entry.targetText)) return entry.targetText;
-  return entry.sourceText;
+  if (!isChineseText(entry.sourceText)) return spokenTextFor(entry.sourceText);
+  if (!isChineseText(entry.targetText)) return spokenTextFor(entry.targetText);
+  return spokenTextFor(entry.sourceText);
 };
 
+// Chrome lists the macOS novelty voices (Ralph, Albert, Bubbles, Zarvox…) before
+// the real narrators and they all claim en-US, so "first en-US voice" makes a
+// dictionary read like a cartoon. Prefer a known-good narrator by name and skip
+// the joke voices.
+const PREFERRED_ENGLISH_VOICES = [
+  "samantha",
+  "ava",
+  "allison",
+  "susan",
+  "serena",
+  "karen",
+  "daniel",
+  "moira",
+  "tessa",
+  "alex",
+];
+
+const NOVELTY_VOICE_NAMES = new Set([
+  "albert",
+  "bad news",
+  "bahh",
+  "bells",
+  "boing",
+  "bubbles",
+  "cellos",
+  "good news",
+  "jester",
+  "junior",
+  "organ",
+  "superstar",
+  "trinoids",
+  "whisper",
+  "wobble",
+  "zarvox",
+  "ralph",
+  "fred",
+  "grandma",
+  "grandpa",
+  "eddy",
+  "flo",
+  "reed",
+  "rocko",
+  "sandy",
+  "shelley",
+]);
+
+// macOS reports "Eddy (English (United States))" style names, so match on the
+// bare name before the language suffix.
+const voiceBaseName = (voice: SpeechSynthesisVoice) =>
+  voice.name.split("(")[0].trim().toLowerCase();
+
+const isEnglishVoice = (voice: SpeechSynthesisVoice) =>
+  voice.lang.replace("_", "-").toLowerCase().startsWith("en");
+
 const pickEnglishVoice = (synth: SpeechSynthesis) => {
-  const voices = synth.getVoices();
+  const englishVoices = synth.getVoices().filter(isEnglishVoice);
+
+  for (const name of PREFERRED_ENGLISH_VOICES) {
+    const narrator = englishVoices.find((voice) => voiceBaseName(voice) === name);
+    if (narrator) return narrator;
+  }
+
+  const naturalVoices = englishVoices.filter(
+    (voice) => !NOVELTY_VOICE_NAMES.has(voiceBaseName(voice)),
+  );
+
   return (
-    voices.find((voice) => voice.lang.replace("_", "-") === "en-US") ??
-    voices.find((voice) => voice.lang.replace("_", "-").toLowerCase().startsWith("en")) ??
+    naturalVoices.find((voice) => voice.lang.replace("_", "-") === "en-US") ??
+    naturalVoices[0] ??
+    // Only joke voices are installed — let the browser pick by lang instead.
     null
   );
 };
