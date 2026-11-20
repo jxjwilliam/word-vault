@@ -42,6 +42,9 @@ domain-aware (AI/programming terms get established Chinese forms, e.g. RAG →
 检索增强生成) and requires English input to produce Chinese text; proper nouns and brand
 names keep the English name with a short Chinese explanation in parentheses
 (e.g. Terraform → Terraform（基础设施即代码工具）).
+Additional meanings remain Chinese, while synonyms, antonyms, and example sentences
+are English only. The API filters non-English-script text from those three fields,
+and the UI also hides legacy saved values that contain non-English scripts.
 
 | Env var | Default | Purpose |
 |---|---|---|

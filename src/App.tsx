@@ -39,6 +39,9 @@ const splitList = (value: string): string[] =>
 
 const listToInput = (list: string[]): string => list.join(", ");
 
+const hasNonEnglishScript = (value: string) =>
+  /[\u3000-\u30ff\u3400-\u9fff\u{20000}-\u{2ffff}\uac00-\ud7af\uff00-\uffef]/u.test(value);
+const englishOnly = (values: string[]) => values.filter((value) => !hasNonEnglishScript(value));
 const isChineseText = (value: string) => /[\u4e00-\u9fff]/.test(value);
 
 // zh→en rows can keep a Chinese gloss beside the English term
@@ -166,6 +169,9 @@ const normalizePreview = (inputText: string, lookup: LookupResult): PreviewItem 
 
   return {
     ...lookup,
+    synonyms: englishOnly(lookup.synonyms),
+    antonyms: englishOnly(lookup.antonyms),
+    examples: englishOnly(lookup.examples),
     translation,
     sourceText,
     targetText,
@@ -925,9 +931,9 @@ export function App() {
             const expanded = expandedId === entry.id;
             const detail = detailCache[entry.id];
             const meanings = detail?.meanings ?? [];
-            const examples = detail?.examples ?? [];
-            const synonyms = uniqueStrings([...(detail?.synonyms ?? []), ...entry.synonyms]);
-            const antonyms = uniqueStrings([...(detail?.antonyms ?? []), ...entry.antonyms]);
+            const examples = englishOnly(detail?.examples ?? []);
+            const synonyms = uniqueStrings(englishOnly([...(detail?.synonyms ?? []), ...entry.synonyms]));
+            const antonyms = uniqueStrings(englishOnly([...(detail?.antonyms ?? []), ...entry.antonyms]));
             return (
               <div key={entry.id}>
                 <div

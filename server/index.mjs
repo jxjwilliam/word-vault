@@ -364,6 +364,8 @@ async function lookupWord(word) {
                 "For English input, translation must be Chinese text — never echo the English word itself. " +
                 "For proper nouns or brand names without an established Chinese name, keep the English name and add a short Chinese explanation in parentheses " +
                 "(e.g. Terraform → Terraform（基础设施即代码工具）, Kubernetes → Kubernetes（容器编排平台）). " +
+                "Meanings may be written in Chinese, but synonyms, antonyms, and examples must be English only. " +
+                "Return synonyms and antonyms as English words or phrases, with no Chinese translations or glosses; write examples as short, natural English sentences. " +
                 'Respond ONLY with a JSON object: {"translation": string, "meanings": [{"pos": string, "text": string}], "synonyms": string[], "antonyms": string[], "examples": string[]} ' +
                 "with at most 3 meanings, 3 synonyms/antonyms, and 2 short examples.",
             },
@@ -426,13 +428,22 @@ async function lookupWord(word) {
           .slice(0, 3)
       : [],
     synonyms: Array.isArray(parsed.synonyms)
-      ? parsed.synonyms.map((item) => String(item).trim()).filter(Boolean).slice(0, 3)
+      ? parsed.synonyms
+          .map((item) => String(item).trim())
+          .filter((item) => item && !/[\u3000-\u30ff\u3400-\u9fff\u{20000}-\u{2ffff}\uac00-\ud7af\uff00-\uffef]/u.test(item))
+          .slice(0, 3)
       : [],
     antonyms: Array.isArray(parsed.antonyms)
-      ? parsed.antonyms.map((item) => String(item).trim()).filter(Boolean).slice(0, 3)
+      ? parsed.antonyms
+          .map((item) => String(item).trim())
+          .filter((item) => item && !/[\u3000-\u30ff\u3400-\u9fff\u{20000}-\u{2ffff}\uac00-\ud7af\uff00-\uffef]/u.test(item))
+          .slice(0, 3)
       : [],
     examples: Array.isArray(parsed.examples)
-      ? parsed.examples.map((item) => String(item).trim()).filter(Boolean).slice(0, 2)
+      ? parsed.examples
+          .map((item) => String(item).trim())
+          .filter((item) => item && !/[\u3000-\u30ff\u3400-\u9fff\u{20000}-\u{2ffff}\uac00-\ud7af\uff00-\uffef]/u.test(item))
+          .slice(0, 2)
       : [],
     direction,
   };
